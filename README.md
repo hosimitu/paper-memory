@@ -1,5 +1,7 @@
 # Paper Memory — 論文知識蓄積システム
 
+[English Version](README_EN.md) / 日本語版
+
 A-Memの設計思想（Zettelkasten原則：原子性・リンキング・進化）に基づき、研究論文PDFから知識要素を抽出・蓄積・組織化するシステムです。
 
 ## ✨ 主な特徴とアーキテクチャ
@@ -168,30 +170,37 @@ paper-memory/
 ### データモデル
 各ノートは以下の構造で保存されます:
 
-| フィールド | 説明 |
-|-----------|------|
-| `id` | 一意なUUID |
-| `content` | 知識要素の要約テキスト |
-| `source_paper` | 元論文情報（タイトル, 著者, 年, DOI等） |
-| `element_type` | 要素の種類（background, method, result, insight 等） |
-| `keywords` | 検索用のキーワードリスト |
-| `context` | 知識が活きる文脈や前提条件 |
-| `tags` | 分類用タグ |
-| `links` | 他ノートとの関連付け (IDリスト) |
-| `evolution_history`| ノートの更新・進化の履歴 |
+| フィールド          | 説明                                                 |
+| ------------------- | ---------------------------------------------------- |
+| `id`                | 一意なUUID                                           |
+| `content`           | 知識要素の要約テキスト                               |
+| `source_paper`      | 元論文情報（タイトル, 著者, 年, DOI等）              |
+| `element_type`      | 要素の種類（background, method, result, insight 等） |
+| `keywords`          | 検索用のキーワードリスト                             |
+| `context`           | 知識が活きる文脈や前提条件                           |
+| `tags`              | 分類用タグ                                           |
+| `links`             | 他ノートとの関連付け (IDリスト)                      |
+| `evolution_history` | ノートの更新・進化の履歴                             |
 
 ### 参考文献 (Reference)
-| フィールド | 説明 |
-|-----------|------|
-| `id` | 一意なUUID |
-| `title` | 文献タイトル |
-| `authors` | 著者リスト |
-| `year` | 出版年 |
-| `doi` | DOI |
-| `journal` | ジャーナル / 会議名 |
-| `cited_by` | 引用元の論文タイトル |
-| `relevance` | 重要度 (high / medium) |
-| `reason` | 重要と判断された理由 |
-| `status` | ステータス (unread / done) |
+| フィールド  | 説明                       |
+| ----------- | -------------------------- |
+| `id`        | 一意なUUID                 |
+| `title`     | 文献タイトル               |
+| `authors`   | 著者リスト                 |
+| `year`      | 出版年                     |
+| `doi`       | DOI                        |
+| `journal`   | ジャーナル / 会議名        |
+| `cited_by`  | 引用元の論文タイトル       |
+| `relevance` | 重要度 (high / medium)     |
+| `reason`    | 重要と判断された理由       |
+| `status`    | ステータス (unread / done) |
 
 ※ `status` が `done`（読了）になると、ファイルは削除され `_history.json` に履歴として移行します。
+
+---
+
+## 📄 ライセンス
+
+このプロジェクトは Apache License 2.0 のもとで公開されています。詳細は [LICENSE](LICENSE) ファイルを参照してください。
+また、使用しているサードパーティ製ライブラリのライセンスについては [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) を参照してください。
