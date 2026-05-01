@@ -1,0 +1,43 @@
+description = "論文PDFを解析し、知識要素をPaper Memoryに蓄積します"
+
+prompt = """
+以下のPDFファイルを読み込み、Paper Memoryシステムに知識要素を登録してください。
+
+## 手順
+
+1. **PDFを読み込む**: {{args}} で指定されたPDFファイルを解析してください
+2. **書誌情報を抽出**: タイトル、著者、年、DOI、ジャーナル名。また `pdf_path` には {{args}} の値を設定してください。
+3. **知識要素に分割**: GEMINI.mdのルールに従い、以下の要素タイプに分割:
+   - background（背景・先行研究）
+   - method（手法）
+   - result（結果）
+   - discussion（考察）
+   - conclusion（結論）
+   - insight（洞察）
+   - limitation（限界・課題）
+   - future_work（今後の展望）
+   - definition（重要な用語定義）
+4. **JSON生成**: GEMINI.mdのフォーマットに従ってJSONを生成
+5. **バックエンド登録**: 文字化けと引用符エラーを完全に回避するため、生成したJSON配列を **Base64エンコード** した上で、以下のコマンドを実行してください。
+   **PowerShellでの正しいエンコード手順**:
+   ```powershell
+   $json = '<生成したJSON配列>'
+   $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+   $base64 = [Convert]::ToBase64String($bytes)
+   python -m paper_memory add --base64 $base64
+   ```
+6. **リンク生成**: 追加した各ノートについて近傍検索を行い、関連ノートにリンクを張る
+   ```
+   python -m paper_memory neighbors --note-id "<ノートID>"
+   ```
+   結果を確認し、関連があれば:
+   ```
+   python -m paper_memory link --source "<ノートID>" --target "<関連ノートID>" --reason "関連理由"
+   ```
+7. **結果報告**: 追加したノート数、要素タイプ別の内訳、リンク生成結果を日本語で報告
+
+## 注意事項
+- 各ノートは独立して理解可能にすること
+- 具体的な数値・手法名を含めること
+- キーワードは一般用語と専門用語の両方を含めること
+"""

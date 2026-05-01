@@ -1,0 +1,24 @@
+# Paper Memory — Gemini CLIコンテキスト除外設定
+# ベクトルDBとキャッシュはコンテキストに含めない
+
+# ChromaDB
+.chromadb/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Git
+.git/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# テスト・開発用
+*.egg-info/
+dist/
+build/

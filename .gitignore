@@ -1,0 +1,35 @@
+# Paper Memory — Git除外設定
+
+# ChromaDBデータ
+.chromadb/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PDF（論文PDFは個別にgit addする場合のみ追跡）
+pdf/*.pdf
+
+# IDE
+.vscode/
+.idea/
+
+# Environment Variables
+.env
+
+# Temporary files
+scratch/
+
+# Generated User Data (Notes & References)
+notes/*.json
+references/*.json
