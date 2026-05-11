@@ -4,11 +4,23 @@
 
 A-Memの設計思想（Zettelkasten原則：原子性・リンキング・進化）に基づき、研究論文PDFから知識要素を抽出・蓄積・組織化するシステムです。
 
+## 💻 動作環境
+
+本システムは以下の環境で開発・動作確認を行っています。特にシェルコマンドの構文は **PowerShell** を前提としています。
+
+- **OS**: Windows 10/11
+- **Shell**: Windows PowerShell 5.1 / PowerShell 7+
+- **Python**: 3.10+
+- **Node.js**: 18+ (Gemini CLI用)
+
+
 ## ✨ 主な特徴とアーキテクチャ
 
 本システムは、LLM（Gemini CLI）による高度なテキスト解析と、Pythonバックエンドによる堅牢なデータ管理を組み合わせたハイブリッド・アーキテクチャを採用しています。
 
 - **Zettelkasten原則**: ノートの原子性を保ち、意味的な関連性に基づいたリンク構造を自動・手動で構築します。
+- **SQLiteによる一元管理**: メタデータとリンク関係を SQLite データベースで高速かつ堅牢に管理します。
+- **Webダッシュボード**: 蓄積された知識をブラウザ上で美しく視覚化し、直感的な探索が可能です。
 - **セマンティック検索**: Gemini Embedding を用いた高性能な日本語のベクトル検索が可能です。
 - **DOIの自動取得・検証**: 論文解析や参考文献登録時、タイトルと著者情報をもとに Crossref / OpenAlex API を用いて正しい DOI を自動補完します。
 
@@ -19,9 +31,13 @@ A-Memの設計思想（Zettelkasten原則：原子性・リンキング・進化
   - リンク生成の判断
        ↓ シェルコマンド連携
 [Pythonヘルパー (バックエンド)]
-  - ChromaDBを用いたセマンティック検索
-  - JSONによる確実なデータ永続化
+  - SQLite による一元的なデータ管理
+  - ChromaDB を用いたセマンティック検索
   - DOI自動補完・リンク管理
+       ↓ API提供
+[Web ダッシュボード (閲覧用)]
+  - 知識の視覚化・グラフ探索
+  - ダーク/ライトモード対応
 ```
 
 ---
@@ -33,19 +49,46 @@ A-Memの設計思想（Zettelkasten原則：原子性・リンキング・進化
 ### 1. Python環境の構築 (必須)
 バックエンド処理を担うPython環境をセットアップします。
 
-```bash
+```powershell
+# プロジェクトディレクトリへ移動
 cd c:\github\paper-memory
+
+# 仮想環境の作成
 python -m venv .venv
-.venv\Scripts\activate
+
+# 仮想環境の有効化 (PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# 依存パッケージのインストール
 pip install -r requirements.txt
 ```
 
-### 2. 環境変数の設定 (強く推奨)
-プロジェクトルートに `.env` ファイルを作成し、Gemini APIキーを設定します。
-※ **注意**: これを設定しなくても最低限の機能（ローカルでの簡易検索やDOI取得）は動きますが、**高精度な日本語セマンティック検索や自動リンク生成機能（autolink）を利用して「万全な状態」で運用するためには必須**となります。
+### 2. 高性能PDF解析機能の有効化
+本システムは、論文の図表・スタイルを正確に抽出するためにハイブリッド解析パイプラインを採用しています。
 
-```bash
-# PowerShellの場合
+- **標準（推奨）**: `pymupdf4llm` + `img2table`
+  本文・画像抽出に加え、画像処理ベースで表を正確に認識します。上付き・下付き文字も復元されます。
+- **高精度**: `marker-pdf`
+  複雑な LaTeX 数式をテキスト化したい場合に使用します（実行に時間がかかります）。
+
+```powershell
+# PDFをMarkdownに変換する例
+python scripts/extract_pdf.py "pdf/paper.pdf" "scratch/output.md" --use-pymupdf
+```
+
+### 3. データのマイグレーション (既存ユーザーのみ)
+既存の JSON データがある場合は、以下のコマンドで SQLite へ移行します。
+
+```powershell
+python -m paper_memory migrate --type notes
+python -m paper_memory migrate --type refs
+```
+
+### 3. 環境変数の設定 (強く推奨)
+プロジェクトルートに `.env` ファイルを作成し、Gemini APIキーを設定します。
+
+```powershell
+# .envファイルの作成
 New-Item .env -ItemType File
 ```
 
@@ -53,119 +96,66 @@ New-Item .env -ItemType File
 ```env
 GEMINI_API_KEY="あなたのAPIキー"
 ```
-*(APIキーは [Google AI Studio](https://aistudio.google.com/app/apikey) から無料で取得可能です)*
-
-### 3. Gemini CLIのインストール (必須)
-論文の読み込みや解析のフロントエンドとして使用します。
-
-```bash
-npm install -g @google/gemini-cli
-```
-
-### 4. 動作確認
-```bash
-# バックエンドの確認
-python -m paper_memory stats
-
-# フロントエンドの確認
-gemini
-```
 
 ---
 
-## 📖 基本的な使い方（知識のライフサイクル）
+## 📖 使い方
 
-### Step 1: 論文の解析と知識の抽出
+### 1. 知識を蓄積する (Gemini CLI)
 解析したいPDFを `pdf/` フォルダに配置し、Gemini CLI経由で解析を指示します。
 
-```bash
-cd c:\github\paper-memory
+```powershell
 gemini
-```
-プロンプトで以下を入力します:
-```text
+# プロンプトで以下を入力
 /paper:add pdf/your_paper_filename.pdf
 ```
-*(自然言語で「filename.pdfを解析して」と入力しても実行可能です)*
 
-**裏側で行われること:**
-1. AIがPDFを読み込み、知識要素に分割します。
-2. バックエンドがメイン論文の **DOIを自動補完** します。
-3. ChromaDBとJSONにノートが保存されます。
-4. AIが既存のノート群から近傍ノートを検索し、**関連リンクを自動生成** します。
+### 2. 知識をブラウズする (Web Dashboard)
+蓄積された知識を視覚的にブラウズするには、ダッシュボードを起動します。
 
-### Step 2: 知識の検索と一覧
-蓄積された知識はいつでも検索・閲覧できます。
+```powershell
+# サーバーの起動
+python -m paper_memory serve
+```
+起動後、ブラウザで **`http://localhost:8080`** にアクセスしてください。
+
+### 3. 知識を検索・管理する (CLI)
+Gemini CLI または直接のコマンドから検索が可能です。
 
 ```text
 # セマンティック検索
 /paper:search 膜分離技術の性能評価
-
-# ノートの一覧表示
-/paper:list
-/paper:list method
-/paper:list 論文タイトル
-```
-
-### Step 3: 知識の進化
-既存ノートのリンクを再評価し、タグや文脈を自動で更新させます。
-
-```text
-/paper:evolve
 ```
 
 ---
 
-## 🛠️ バックエンドCLI（手動操作・管理用）
+## 🛠️ バックエンドCLI
 
-Pythonヘルパーを直接呼び出すことで、より詳細なデータ管理や手動での操作が可能です。
-
-### 知識ノートの管理
-```bash
-python -m paper_memory add --json '[{...}]'               # JSONから直接ノート追加
-python -m paper_memory search --query "検索クエリ"         # 検索
-python -m paper_memory list [--paper "論文名"] [--type "method"] # 一覧
-python -m paper_memory link --source "id1" --target "id2" --reason "理由" # リンク手動追加
-python -m paper_memory neighbors --note-id "xxx"          # 近傍ノート検索
+```powershell
 python -m paper_memory stats                              # 統計情報の表示
-python -m paper_memory get --note-id "xxx"                # ノート詳細取得
-python -m paper_memory delete --note-id "xxx"             # ノート削除
-```
-
-### 参考文献 (Reading List) の管理
-論文内で言及された「今後読むべき重要な文献」を追跡・管理します。（DOI自動補完対応）
-
-```bash
-python -m paper_memory refs                              # 未読一覧
-python -m paper_memory refs --relevance high             # 重要度でフィルタ
-python -m paper_memory refs --cited-by "論文名"          # 引用元論文でフィルタ
-python -m paper_memory refs --history                    # 読了済み履歴の確認
-python -m paper_memory refs-add --file refs.json         # 新規文献の登録 (JSON)
-python -m paper_memory refs-update --ref-id "id" --status done  # 読了ステータスへ更新
-python -m paper_memory refs-stats                        # 統計情報の表示
+python -m paper_memory list [--paper "論文名"]             # 一覧
+python -m paper_memory search --query "検索クエリ"         # 検索
+python -m paper_memory serve [--port 8080]                # ダッシュボード起動
+python -m paper_memory migrate --type [notes|refs]        # JSONからDBへの移行
 ```
 
 ---
 
 ## 📁 データ構造
 
-### ディレクトリ構成
 ```text
 paper-memory/
-├── GEMINI.md              # Gemini CLI用コンテキスト（システムプロンプト・ルール）
-├── .gemini/               # Gemini CLI コマンド定義
 ├── paper_memory/          # Pythonバックエンドモジュール
-│   ├── note.py            # ノートデータモデル
-│   ├── reference.py       # 参考文献データモデル
-│   ├── autolinker.py      # AI自動リンク構築ロジック
-│   ├── doi_fetcher.py     # APIを利用したDOI自動補完ロジック
-│   └── store.py           # ストレージ (JSON + ChromaDB) 管理
-├── notes/                 # ノートの永続化先 (JSON)
-├── references/            # 未読参考文献リスト (JSON)
-│   └── _history.json      # 読了済み参考文献履歴
-├── .chromadb/             # ベクトル検索インデックス (自動生成)
-└── pdf/                   # 解析対象の論文PDF置き場
+│   ├── database.py        # SQLite スキーマ・接続管理 (NEW)
+│   ├── server.py          # REST API サーバー (NEW)
+│   ├── dashboard/         # Webダッシュボード静的ファイル (NEW)
+│   └── ...
+├── paper_memory.db        # メインデータベース (SQLite)
+├── .chromadb/             # ベクトル検索インデックス
+├── pdf/                   # 論文PDF
+└── _backup/               # 移行済みJSONの退避先
 ```
+
 
 ### データモデル
 各ノートは以下の構造で保存されます:
@@ -202,5 +192,5 @@ paper-memory/
 
 ## 📄 ライセンス
 
-このプロジェクトは Apache License 2.0 のもとで公開されています。詳細は [LICENSE](LICENSE) ファイルを参照してください。
-また、使用しているサードパーティ製ライブラリのライセンスについては [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) を参照してください。
+本プロジェクトは Apache License 2.0 のもとで公開されています。詳細は [LICENSE](LICENSE) ファイルを参照してください。
+また、本プロジェクトはサードパーティ製ライブラリを使用しています。そのライセンスについては [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) を参照してください。

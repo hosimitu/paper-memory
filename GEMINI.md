@@ -12,6 +12,28 @@
 
 ## ★ 重要ルール
 
+### PDF解析の基本ルール（効率と精度の両立）
+
+「このプロジェクトを実行する際、必ず dir_path="pdf" をデフォルトのPDF所在地として使用すること」
+
+1. **抽出手法の選択**: 解析の速度と品質のバランスをとるため、以下の優先順位で実行する：
+   - **優先（標準）**: `pymupdf4llm` + `img2table` のハイブリッド抽出（約1分）
+     ```powershell
+     python scripts/extract_pdf.py "pdf/path.pdf" "scratch/output.md" --use-pymupdf
+     ```
+     ※ 画像、正確な表、上付き・下付き文字が保持される。抽出されたMarkdownと画像は、自動的に `extracted/PDF名/` ディレクトリに永続的に蓄積されます（後からいつでも参照可能）。
+   - **特殊（明示時のみ）**: `marker-pdf` （約1時間）
+     ```powershell
+     python scripts/extract_pdf.py "pdf/path.pdf" "scratch/output.md" --use-marker --light
+     ```
+     ※ 複雑な LaTeX 数式のテキスト化が必要な場合のみ、ユーザーの承諾を得てバックグラウンドで実行する。
+
+2. **テキスト優先解析**: まず上記コマンドで生成された Markdown（または `extracted/` 配下のファイル）をベースに解析を行う。図表の確認が必要な場合のみ、`extracted/PDF名/images/` に保存された画像を参照する。
+3. **ノート分割生成**: 1論文のノート生成は、以下の3段階に分けてターンを回すことを推奨する：
+   - ターン1: `method`, `background`, `definition`
+   - ターン2: `result`, `discussion`
+   - ターン3: `conclusion`, `limitation`, `future_work`, `insight`
+
 ### 論文解析時のルール
 
 1. **原子性**: 論文から知識を抽出する際、必ず以下の要素タイプに分割すること：
@@ -100,7 +122,7 @@ python -m paper_memory refs --relevance high             # 重要度でフィル
 python -m paper_memory refs --cited-by "論文タイトル"    # 引用元でフィルタ
 python -m paper_memory refs --history                    # 完了済み履歴
 python -m paper_memory refs-add --file scratch/new_refs.json  # 参考文献登録
-python -m paper_memory refs-update --ref-id "ID" --status done  # 完了に更新
+python -m paper_memory refs-update --ref-id "ID" --status done  # 完了に更新 (dismissed も可)
 python -m paper_memory refs-stats                        # 参考文献統計
 ```
 
@@ -108,17 +130,24 @@ python -m paper_memory refs-stats                        # 参考文献統計
 
 新しいノートを追加した後、以下の手順でリンクを生成してください：
 
-1. `python -m paper_memory autolink --note-id "新ノートID"` を実行する
-2. AIが近傍ノートを検索し、意味的に関連するノートとその理由を提示するので確認する
-3. 提示されたリンクが妥当（以下の基準を満たす）であれば承認（`y`）する
+1. 全ノートの登録完了後、以下のコマンドで一括リンク構築を実行する：
+   ```powershell
+   python -m paper_memory autolink --paper-title "論文タイトル" --yes --quiet
+   ```
+2. 実行後、サマリー（追加件数）を確認し、詳細な理由は `logs/autolink_YYYYMMDD.log` で確認可能であることをユーザーに伝える。
+3. 提示されたリンクの妥当性基準：
    - 同じ概念・手法を扱っている
    - 結果が比較可能
    - 一方が他方の前提知識となる
    - 類似の課題に取り組んでいる
-   ※ プロンプトから自動実行する場合は `--yes` オプションを利用できます。
+
+### scratch フォルダの管理
+- 解析および `paper_memory` への登録が完了した際、ユーザーへの報告の直前に必ず一時ファイルを削除すること。その際、確認メッセージが出ないようにすること。
+  ```powershell
+  Remove-Item -Path "scratch/*" -Recurse -Force -Confirm:$false
+  ```
 
 ### 参考文献の抽出ルール（Reading List）
-
 論文のコアとなる発見・手法に直結する引用文献を選定し、Reading List に登録する。
 該当する文献がない場合はスキップしてよい（0件でも可）。
 
@@ -166,11 +195,7 @@ python -m paper_memory refs-stats                        # 参考文献統計
 - 検索結果はフォーマットして見やすく表示する
 - ローカルノートとWEB情報が混在する場合は、以下の形式で**必ず出典を分離**する
 
-| 種別 | セクション見出し | 出典形式 |
-|------|-----------------|----------|
+| 種別       | セクション見出し              | 出典形式                               |
+| ---------- | ----------------------------- | -------------------------------------- |
 | 蓄積ノート | 📁 **Paper Memory からの情報** | `[Local: note_id] タイトル (著者, 年)` |
-| WEB検索 | 🌐 **WEB検索による補足情報** | `[Web] サイト名 (URL)` |
-
-### 解析完了後
-
-論文1件の解析・登録・リンク生成が完了したら、**Gemini CLI で `/compress` を実行**して文脈を圧縮してください（shell では実行不可）。
+| WEB検索    | 🌐 **WEB検索による補足情報**   | `[Web] サイト名 (URL)`                 |

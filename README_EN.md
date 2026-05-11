@@ -4,6 +4,16 @@
 
 A system to extract, accumulate, and organize knowledge elements from research paper PDFs, based on the A-Mem design philosophy (Zettelkasten principles: Atomicity, Linking, Evolution).
 
+## 💻 Environment
+
+This system is developed and tested in the following environment. Shell commands and scripts are designed for **PowerShell**.
+
+- **OS**: Windows 10/11
+- **Shell**: Windows PowerShell 5.1 / PowerShell 7+
+- **Python**: 3.10+
+- **Node.js**: 18+ (for Gemini CLI)
+
+
 ## ✨ Key Features and Architecture
 
 This system employs a hybrid architecture combining advanced text analysis via LLM (Gemini CLI) and robust data management with a Python backend.
@@ -33,10 +43,17 @@ To fully utilize all features (high-precision search, AI-driven auto-linking, et
 ### 1. Python Environment Setup (Required)
 Set up the Python environment for backend processing.
 
-```bash
+```powershell
+# Navigate to project directory
 cd c:\github\paper-memory
+
+# Create virtual environment
 python -m venv .venv
-.venv\Scripts\activate
+
+# Activate virtual environment (PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
@@ -44,8 +61,8 @@ pip install -r requirements.txt
 Create a `.env` file in the project root and set your Gemini API key.
 *Note: While basic functions (local search, DOI fetching) work without this, it is **required for high-precision semantic search and the AI-driven `autolink` feature**.*
 
-```bash
-# In PowerShell
+```powershell
+# Create .env file
 New-Item .env -ItemType File
 ```
 
@@ -58,12 +75,12 @@ GEMINI_API_KEY="your_api_key_here"
 ### 3. Gemini CLI Installation (Required)
 Used as the frontend for reading and analyzing papers.
 
-```bash
+```powershell
 npm install -g @google/gemini-cli
 ```
 
 ### 4. Verification
-```bash
+```powershell
 # Verify backend
 python -m paper_memory stats
 
@@ -78,7 +95,7 @@ gemini
 ### Step 1: Paper Analysis and Knowledge Extraction
 Place the PDF you want to analyze in the `pdf/` folder and instruct Gemini CLI to analyze it.
 
-```bash
+```powershell
 cd c:\github\paper-memory
 gemini
 ```
@@ -121,7 +138,7 @@ Re-evaluate links for existing notes and automatically update tags or context.
 You can call the Python helper directly for detailed data management.
 
 ### Knowledge Note Management
-```bash
+```powershell
 python -m paper_memory add --json '[{...}]'               # Add notes directly from JSON
 python -m paper_memory search --query "search query"      # Search
 python -m paper_memory list [--paper "title"] [--type "type"] # List
@@ -135,7 +152,7 @@ python -m paper_memory delete --note-id "xxx"             # Delete note
 ### Reference (Reading List) Management
 Track and manage "important papers to read next" mentioned in your analysis. (Supports DOI auto-completion)
 
-```bash
+```powershell
 python -m paper_memory refs                              # List unread references
 python -m paper_memory refs --relevance high             # Filter by relevance
 python -m paper_memory refs --cited-by "title"           # Filter by source paper
