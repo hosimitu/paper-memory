@@ -94,7 +94,8 @@
 # ノートの追加（文字化け・トークン消費防止のため、チャットにはJSONを出力せず直接ファイルに書き込むこと）
 # 1. 抽出したJSONを scratch/new_notes.json に UTF-8 で保存する
 # 2. 以下を実行
-python -m paper_memory add --file scratch/new_notes.json
+python -m paper_memory add --file scratch/new_notes.json --cleanup
+# ※ --cleanup を付けると処理完了後に scratch/ 内を自動で掃除します。
 # ※ source_paper の DOI が空の場合、API で自動補完されます。
 
 # セマンティック検索
@@ -115,13 +116,14 @@ python -m paper_memory autolink --note-id "ノートID"   # AI自動リンク構
 python -m paper_memory stats                            # 統計情報
 python -m paper_memory get --note-id "ノートID"        # ノート取得
 python -m paper_memory delete --note-id "ノートID"     # ノート削除
+python -m paper_memory cleanup                         # scratch フォルダを掃除
 
 # 参考文献（Reading List）操作
 python -m paper_memory refs                              # 未読一覧
 python -m paper_memory refs --relevance high             # 重要度でフィルタ
 python -m paper_memory refs --cited-by "論文タイトル"    # 引用元でフィルタ
 python -m paper_memory refs --history                    # 完了済み履歴
-python -m paper_memory refs-add --file scratch/new_refs.json  # 参考文献登録
+python -m paper_memory refs-add --file scratch/new_refs.json --cleanup  # 参考文献登録
 python -m paper_memory refs-update --ref-id "ID" --status done  # 完了に更新 (dismissed も可)
 python -m paper_memory refs-stats                        # 参考文献統計
 ```
@@ -142,9 +144,9 @@ python -m paper_memory refs-stats                        # 参考文献統計
    - 類似の課題に取り組んでいる
 
 ### scratch フォルダの管理
-- 解析および `paper_memory` への登録が完了した際、ユーザーへの報告の直前に必ず一時ファイルを削除すること。その際、確認メッセージが出ないようにすること。
+- 解析および `paper_memory` への登録が完了した際、登録コマンドに `--cleanup` フラグを付与するか、以下のコマンドを実行して `scratch/` フォルダを空にしてください。
   ```powershell
-  Remove-Item -Path "scratch/*" -Recurse -Force -Confirm:$false
+  python -m paper_memory cleanup
   ```
 
 ### 参考文献の抽出ルール（Reading List）
@@ -185,7 +187,7 @@ python -m paper_memory refs-stats                        # 参考文献統計
 **登録手順：**
 1. 抽出した文献のDOIが本文中に明記されている場合はそれを記載し、不明な場合は空文字 `""` にすること（推測や捏造は厳禁）。**WEB検索は不要です**。不足しているDOIや書誌情報は、登録時にバックエンドのPythonスクリプトがCrossref/OpenAlex APIを用いて自動的に検索・補完します。
 2. 上記JSONを `scratch/new_refs.json` に UTF-8 で保存
-3. `python -m paper_memory refs-add --file scratch/new_refs.json` で登録
+3. `python -m paper_memory refs-add --file scratch/new_refs.json --cleanup` で登録
    - 登録時に自動で重複チェック（既存の参考文献リスト＋解析済みノートと照合）
 
 
