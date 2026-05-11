@@ -98,10 +98,34 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
                 response_mime_type="application/json"
             )
         )
-        result_text = response.text
-        # JSONとしてパース
-        results = json.loads(result_text)
-        return results
+        result_text = response.text.strip()
+        
+        # Markdownのコードブロック記法が含まれている場合は除去
+        if result_text.startswith("```json"):
+            result_text = result_text[7:]
+        elif result_text.startswith("```"):
+            result_text = result_text[3:]
+        if result_text.endswith("```"):
+            result_text = result_text[:-3]
+        result_text = result_text.strip()
+
+        try:
+            # JSONとしてパース
+            results = json.loads(result_text)
+            if not isinstance(results, list):
+                results = [results]
+            return results
+        except json.JSONDecodeError as e:
+            # 配列ではなく連続したJSONオブジェクト（{} {}...）が返された場合の救済処理
+            import re
+            fixed_text = re.sub(r'\}\s*\{', '},{', result_text)
+            if not fixed_text.startswith('['):
+                fixed_text = '[' + fixed_text + ']'
+            try:
+                results = json.loads(fixed_text)
+                return results
+            except json.JSONDecodeError:
+                raise e
     except Exception as e:
         print(f"⚠️ LLMリンク評価中にエラーが発生しました: {e}", file=sys.stderr)
         return []

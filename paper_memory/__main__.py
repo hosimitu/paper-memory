@@ -69,7 +69,8 @@ def create_parser() -> argparse.ArgumentParser:
     # --- search コマンド ---
     search_parser = subparsers.add_parser("search", help="セマンティック検索")
     search_parser.add_argument("--query", required=True, help="検索クエリ")
-    search_parser.add_argument("--n", type=int, default=5, help="結果数（デフォルト: 5）")
+    search_parser.add_argument("--n", type=int, default=10, help="結果数（デフォルト: 10）")
+    search_parser.add_argument("--threshold", type=float, default=None, help="距離の閾値（例: 0.45。指定すると閾値以下の結果をすべて返します）")
 
     # --- list コマンド ---
     list_parser = subparsers.add_parser("list", help="ノート一覧")
@@ -96,9 +97,11 @@ def create_parser() -> argparse.ArgumentParser:
 
     # --- autolink コマンド ---
     autolink_parser = subparsers.add_parser("autolink", help="LLMによる自動リンク構築")
-    autolink_parser.add_argument("--note-id", required=True, help="基準ノートID")
+    autolink_parser.add_argument("--note-id", default=None, help="基準ノートID")
+    autolink_parser.add_argument("--paper-title", default=None, help="論文タイトルを指定して全ノートを一括autolinkする")
     autolink_parser.add_argument("--n", type=int, default=5, help="結果数（デフォルト: 5）")
     autolink_parser.add_argument("--yes", action="store_true", help="確認プロンプトをスキップしてすべて承認する")
+    autolink_parser.add_argument("--quiet", action="store_true", help="詳細を表示せず、サマリーのみ出力する（ログにはすべて記録）")
     # --- scan コマンド ---
     subparsers.add_parser("scan", help="pdf/ フォルダ内のファイルをスキャン")
 
@@ -107,6 +110,14 @@ def create_parser() -> argparse.ArgumentParser:
 
     # --- reindex コマンド ---
     subparsers.add_parser("reindex", help="検索インデックスを再構築")
+
+    # --- migrate コマンド ---
+    migrate_parser = subparsers.add_parser("migrate", help="JSONファイルをSQLiteに移行")
+    migrate_parser.add_argument("--type", required=True, choices=["notes", "refs"], help="移行する対象")
+
+    # --- serve コマンド ---
+    serve_parser = subparsers.add_parser("serve", help="Webダッシュボード用APIサーバーを起動")
+    serve_parser.add_argument("--port", type=int, default=8080, help="ポート番号 (デフォルト: 8080)")
 
     # --- get コマンド ---
     get_parser = subparsers.add_parser("get", help="ノートを取得")
@@ -134,7 +145,7 @@ def create_parser() -> argparse.ArgumentParser:
     # --- refs-update コマンド ---
     refs_update_parser = subparsers.add_parser("refs-update", help="参考文献のステータスを更新")
     refs_update_parser.add_argument("--ref-id", required=True, help="参考文献ID")
-    refs_update_parser.add_argument("--status", required=True, choices=["unread", "done"], help="新しいステータス")
+    refs_update_parser.add_argument("--status", required=True, choices=["unread", "done", "dismissed"], help="新しいステータス")
     refs_update_parser.add_argument("--link-notes", default="", help="紐付けるノートID（カンマ区切り）")
 
     # --- refs-stats コマンド ---
@@ -148,7 +159,7 @@ def output_json(data, indent: int = 2) -> None:
     print(json.dumps(data, ensure_ascii=False, indent=indent))
 
 
-def cmd_add(args, store: NoteStore) -> None:
+def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
     """ノート追加コマンド"""
     json_str = ""
     if args.base64:
@@ -199,6 +210,19 @@ def cmd_add(args, store: NoteStore) -> None:
         
         notes = [PaperNote.from_dict(d) for d in data]
         added = store.add_batch(notes)
+        
+        # 参考文献リストから自動削除
+        cleaned_total = 0
+        paper_titles = set()
+        for d in data:
+            sp = d.get("source_paper", {})
+            if sp and sp.get("title"):
+                paper_titles.add((sp["title"], sp.get("doi", "")))
+        for title, doi in paper_titles:
+            cleaned_total += ref_store.mark_done_by_title(title, doi)
+        if cleaned_total > 0:
+            print(f"✅ 参考文献リストから {cleaned_total} 件を完了に移動しました。", file=sys.stderr)
+
         output_json({
             "status": "success",
             "message": f"{len(added)}件のノートを追加しました",
@@ -222,6 +246,13 @@ def cmd_add(args, store: NoteStore) -> None:
                 d["source_paper"] = source_paper
                 notes.append(PaperNote.from_dict(d))
             added = store.add_batch(notes)
+            
+            # 参考文献リストから自動削除（タイトルまたはDOI一致）
+            if source_paper.get("title"):
+                count = ref_store.mark_done_by_title(source_paper["title"], source_paper.get("doi", ""))
+                if count > 0:
+                    print(f"✅ 参考文献リストから {count} 件を完了に移動しました。", file=sys.stderr)
+
             output_json({
                 "status": "success",
                 "message": f"{len(added)}件のノートを追加しました",
@@ -239,6 +270,13 @@ def cmd_add(args, store: NoteStore) -> None:
 
             note = PaperNote.from_dict(data)
             added = store.add(note)
+            
+            # 参考文献リストから自動削除
+            if sp and sp.get("title"):
+                count = ref_store.mark_done_by_title(sp["title"], sp.get("doi", ""))
+                if count > 0:
+                    print(f"✅ 参考文献リストから {count} 件を完了に移動しました。", file=sys.stderr)
+
             output_json({
                 "status": "success",
                 "message": "ノートを追加しました",
@@ -248,7 +286,7 @@ def cmd_add(args, store: NoteStore) -> None:
 
 def cmd_search(args, store: NoteStore) -> None:
     """セマンティック検索コマンド"""
-    results = store.search(args.query, args.n)
+    results = store.search(args.query, args.n, distance_threshold=args.threshold)
     output_json({
         "status": "success",
         "query": args.query,
@@ -347,99 +385,134 @@ def cmd_neighbors(args, store: NoteStore) -> None:
 
 
 def cmd_autolink(args, store: NoteStore) -> None:
-    """自動リンク構築コマンド（2段階適応型探索）"""
+    """自動リンク構築コマンド（一括処理・静音化対応）"""
     from .autolinker import evaluate_links
-    
-    target_note = store.get(args.note_id)
-    if not target_note:
-        print(f"❌ ターゲットノートが見つかりません: {args.note_id}", file=sys.stderr)
+    from datetime import datetime
+
+    if not args.note_id and not args.paper_title:
+        print("❌ エラー: --note-id または --paper-title のいずれかが必要です", file=sys.stderr)
         sys.exit(1)
-        
-    initial_n = args.n
-    print(f"🔍 ノート '{args.note_id}' の近傍候補を検索中 (初期設定 n={initial_n})...", file=sys.stderr)
-    candidates = store.find_neighbors(args.note_id, initial_n)
-    
-    # --- 適応型探索ロジック (2段階探索) ---
-    needs_expansion = False
-    expansion_reason = ""
-    
-    if candidates:
-        # 条件1: 候補がすべて同じ論文内のものか？ (多様性の不足)
-        paper_titles = {c["note"]["source_paper"]["title"] for c in candidates}
-        if len(paper_titles) <= 1 and len(candidates) >= 1:
-            needs_expansion = True
-            expansion_reason = "候補が同一論文内に偏っているため、他論文との繋がりを探します"
-            
-        # 条件2: ノートの性質が基礎的か？
-        if target_note.element_type in ["definition", "insight", "background"]:
-            needs_expansion = True
-            expansion_reason = f"ノートのタイプが '{target_note.element_type}' であるため、広範囲にリンクを探索します"
 
-        # 条件3: 類似度（distance）が偏っているか？
-        distances = [c["distance"] for c in candidates if c["distance"] is not None]
-        if distances:
-            avg_dist = sum(distances) / len(distances)
-            min_dist = min(distances)
-            
-            if avg_dist < 0.1:
-                needs_expansion = True
-                expansion_reason = f"候補がターゲットと酷似しているため(平均距離:{avg_dist:.3f})、範囲を広げて別の文脈を探します"
-            elif min_dist > 0.4:
-                needs_expansion = True
-                expansion_reason = f"関連の強いノートが見つからないため(最小距離:{min_dist:.3f})、探索範囲を広げます"
+    target_note_ids = []
+    if args.paper_title:
+        notes = store.list_by_paper(args.paper_title)
+        target_note_ids = [n.id for n in notes]
+        if not target_note_ids:
+            print(f"ℹ️ 論文 '{args.paper_title}' に紐づくノートが見つかりませんでした。", file=sys.stderr)
+            return
+        if not args.quiet:
+            print(f"📦 論文 '{args.paper_title}' の全{len(target_note_ids)}件のノートを処理します...", file=sys.stderr)
     else:
-        # 条件4: そもそも候補が見つからない
-        needs_expansion = True
-        expansion_reason = "初期検索で候補が見つからなかったため、検索範囲を広げます"
+        target_note_ids = [args.note_id]
 
-    # ユーザーが明示的に大きな値を指定していない場合に拡大を実行
-    if needs_expansion and initial_n < 15:
-        expanded_n = max(15, initial_n * 3)
-        print(f"🚀 {expansion_reason}...", file=sys.stderr)
-        print(f"📡 探索範囲を拡大中: n={expanded_n}", file=sys.stderr)
-        candidates = store.find_neighbors(args.note_id, expanded_n)
-    # ---------------------------------------
+    # ログファイルの準備
+    log_file_path = f"logs/autolink_{datetime.now().strftime('%Y%m%d')}.log"
     
-    if not candidates:
-        print("ℹ️ 近傍ノートが見つかりませんでした。", file=sys.stderr)
-        return
-        
-    print(f"🧠 {len(candidates)}件の候補をLLMで評価中...", file=sys.stderr)
-    evaluations = evaluate_links(target_note.to_dict(), candidates)
-    
-    if not evaluations:
-        print("⚠️ 評価結果を取得できませんでした。", file=sys.stderr)
-        return
-        
-    added_links = 0
-    for eval_item in evaluations:
-        if not eval_item.get("is_linked"):
+    # セッション開始をログに記録
+    with open(log_file_path, "a", encoding="utf-8") as f:
+        f.write(f"\n{'='*80}\n")
+        f.write(f"🚀 Autolink Session: {datetime.now().isoformat()}\n")
+        if args.paper_title:
+            f.write(f"Target Paper: {args.paper_title}\n")
+        elif args.note_id:
+            n = store.get(args.note_id)
+            if n:
+                f.write(f"Target Note: {args.note_id} (Paper: {n.source_paper.title})\n")
+        f.write(f"{'='*80}\n")
+
+    total_added = 0
+    total_evaluated = 0
+
+    for note_id in target_note_ids:
+        target_note = store.get(note_id)
+        if not target_note:
+            print(f"⚠️ ノートが見つかりません: {note_id}", file=sys.stderr)
             continue
             
-        candidate_id = eval_item.get("target_id")
-        reason = eval_item.get("reason", "")
+        initial_n = args.n
+        if not args.quiet:
+            print(f"🔍 ノート '{note_id}' の近傍候補を検索中...", file=sys.stderr)
         
-        print("\n" + "="*50)
-        print(f"✨ リンク候補を発見: {candidate_id}")
-        print(f"📝 理由: {reason}")
-        print("="*50)
+        candidates = store.find_neighbors(note_id, initial_n)
         
-        if args.yes:
-            ans = "y"
+        # 適応型探索（ロジックは維持、出力のみ制御）
+        needs_expansion = False
+        if candidates:
+            paper_titles = {c["note"]["source_paper"]["title"] for c in candidates}
+            if len(paper_titles) <= 1 and len(candidates) >= 1:
+                needs_expansion = True
+            if target_note.element_type in ["definition", "insight", "background"]:
+                needs_expansion = True
+            distances = [c["distance"] for c in candidates if c["distance"] is not None]
+            if distances:
+                min_dist = min(distances)
+                if min_dist > 0.4:
+                    needs_expansion = True
         else:
-            ans = input("このリンクを追加しますか？ [y/N]: ").strip().lower()
+            needs_expansion = True
+
+        if needs_expansion and initial_n < 15:
+            expanded_n = max(15, initial_n * 3)
+            if not args.quiet:
+                print(f"📡 探索範囲を拡大中: n={expanded_n}", file=sys.stderr)
+            candidates = store.find_neighbors(note_id, expanded_n)
+        
+        if not candidates:
+            continue
             
-        if ans == "y":
-            success = store.add_link(args.note_id, candidate_id, reason)
-            if success:
-                print("✅ リンクを追加しました。")
-                added_links += 1
+        if not args.quiet:
+            print(f"🧠 {len(candidates)}件の候補をLLMで評価中...", file=sys.stderr)
+        
+        evaluations = evaluate_links(target_note.to_dict(), candidates)
+        total_evaluated += len(candidates)
+        
+        if not evaluations:
+            continue
+            
+        for eval_item in evaluations:
+            if not eval_item.get("is_linked"):
+                continue
+                
+            candidate_id = eval_item.get("target_id")
+            reason = eval_item.get("reason", "")
+            
+            # 候補ノートのタイトルを取得（ログ用）
+            candidate_dict = next((c for c in candidates if c["note"]["id"] == candidate_id), None)
+            candidate_title = candidate_dict["note"]["source_paper"]["title"] if candidate_dict else "不明"
+
+            # 既にリンク済みかチェック（既存リンクの取得メソッドがない場合は store.add_link の戻り値で判断）
+            if not args.quiet:
+                print("\n" + "="*50)
+                print(f"✨ リンク候補を発見: {note_id} <-> {candidate_id}")
+                print(f"📝 理由: {reason}")
+                print("="*50)
+            
+            # ログ記録
+            with open(log_file_path, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now().isoformat()}] ")
+                f.write(f"[{target_note.source_paper.title}] {note_id} <-> ")
+                f.write(f"[{candidate_title}] {candidate_id} | Reason: {reason}\n")
+            
+            if args.yes:
+                ans = "y"
             else:
-                print("❌ リンクの追加に失敗しました。")
-        else:
-            print("⏭️ スキップしました。")
+                ans = input(f"このリンクを追加しますか？ ({note_id} <-> {candidate_id}) [y/N]: ").strip().lower()
+                
+            if ans == "y":
+                success = store.add_link(note_id, candidate_id, reason)
+                if success:
+                    if not args.quiet:
+                        print("✅ リンクを追加しました。")
+                    total_added += 1
+                else:
+                    if not args.quiet:
+                        print("❌ リンクの追加に失敗しました。")
+            else:
+                if not args.quiet:
+                    print("⏭️ スキップしました。")
             
-    print(f"\n🎉 自動リンク構築完了: {added_links}件のリンクを追加しました。")
+    print(f"\n🎉 自動リンク構築完了: {total_added}件のリンクを追加しました（計{total_evaluated}件評価）。")
+    print(f"📂 詳細ログ: {log_file_path}")
 
 
 def cmd_scan(args, store: NoteStore) -> None:
@@ -479,6 +552,55 @@ def cmd_reindex(args, store: NoteStore) -> None:
         "status": "success",
         "message": f"{count}件のノートを再インデックスしました",
     })
+
+
+def cmd_migrate(args, store: NoteStore, ref_store: ReferenceStore) -> None:
+    """マイグレーションコマンド"""
+    from pathlib import Path
+    root = Path(get_project_root())
+    backup_dir = root / "_backup"
+    
+    if args.type == "notes":
+        notes_dir = root / "notes"
+        print(f"🔄 notes/ ディレクトリのJSONをSQLiteに移行します...", file=sys.stderr)
+        count = store.db.migrate_notes(notes_dir, backup_dir / "notes")
+        
+        # 移行した論文について参考文献リストをクリーンアップ
+        if count > 0:
+            all_papers = store.list_all()
+            paper_info = {} # title -> doi
+            for n in all_papers:
+                paper_info[n.source_paper.title] = n.source_paper.doi
+            
+            cleaned = 0
+            for title, doi in paper_info.items():
+                cleaned += ref_store.mark_done_by_title(title, doi)
+            if cleaned > 0:
+                print(f"✅ 参考文献リストから {cleaned} 件を完了に移動しました。", file=sys.stderr)
+
+        output_json({
+            "status": "success",
+            "message": f"{count}件のノートをデータベースに移行し、JSONファイルをバックアップに退避しました"
+        })
+    elif args.type == "refs":
+        refs_dir = root / "references"
+        print(f"🔄 references/ ディレクトリのJSONをSQLiteに移行します...", file=sys.stderr)
+        count = store.db.migrate_references(refs_dir, backup_dir / "references")
+        output_json({
+            "status": "success",
+            "message": f"{count}件の参考文献と履歴をデータベースに移行し、JSONファイルをバックアップに退避しました"
+        })
+    else:
+        output_json({
+            "status": "error",
+            "message": "未知の移行対象です"
+        })
+
+
+def cmd_serve(args, store: NoteStore) -> None:
+    """サーバー起動コマンド"""
+    from .server import run_server
+    run_server(port=args.port)
 
 
 def cmd_get(args, store: NoteStore) -> None:
@@ -597,6 +719,18 @@ def cmd_refs_add(args, ref_store: ReferenceStore, note_store: NoteStore) -> None
         # 1. references/ 内で重複チェック
         existing_ref = ref_store.find_duplicate(title, doi)
         if existing_ref:
+            # 除外済み(dismissed)の場合、別の論文から引用されていれば再有効化する
+            if existing_ref.status == "dismissed" and existing_ref.cited_by != item.get("cited_by"):
+                print(f"🔄 除外済みの参考文献を再有効化: '{title}' （新しい引用元: {item.get('cited_by')}）", file=sys.stderr)
+                existing_ref.status = "unread"
+                existing_ref.cited_by = item.get("cited_by")
+                existing_ref.cited_by_pdf = item.get("cited_by_pdf", "")
+                existing_ref.reason = item.get("reason", existing_ref.reason)
+                existing_ref.updated_at = datetime.now().isoformat()
+                ref_store.add(existing_ref) # 上書き保存
+                added.append(existing_ref)
+                continue
+
             print(f"⚠️ Reading Listに登録済み: '{title}' （引用元: {existing_ref.cited_by}）", file=sys.stderr)
             skipped_dup_ref.append(title)
             continue
@@ -716,13 +850,18 @@ def main() -> None:
         "scan": cmd_scan,
         "stats": cmd_stats,
         "reindex": cmd_reindex,
+        "migrate": cmd_migrate,
+        "serve": cmd_serve,
         "get": cmd_get,
         "delete": cmd_delete,
     }
 
     # コマンドディスパッチ
     if args.command in note_commands:
-        note_commands[args.command](args, store)
+        if args.command in ["add", "migrate"]:
+            note_commands[args.command](args, store, ref_store)
+        else:
+            note_commands[args.command](args, store)
     elif args.command == "refs":
         cmd_refs(args, ref_store)
     elif args.command == "refs-add":
