@@ -32,6 +32,10 @@ This project, **Paper Memory**, uses the following open-source software and thir
 - **License**: BSD 3-Clause License
 - **Description**: Reads key-value pairs from a `.env` file.
 
+### [pypdf](https://github.com/py-pdf/pypdf)
+- **License**: BSD 3-Clause License
+- **Description**: A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files.
+
 ---
 
 ## License Texts

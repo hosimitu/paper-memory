@@ -6,6 +6,4 @@ pymupdf
 img2table
 opencv-python-headless
 pandas
-requests
-aiohttp
 pypdf
