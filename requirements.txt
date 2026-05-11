@@ -1,3 +1,9 @@
-chromadb>=0.5.0
+chromadb
 google-generativeai
 python-dotenv
+pymupdf4llm
+pymupdf
+img2table
+opencv-python-headless
+pandas
+pypdf

@@ -65,6 +65,9 @@ def create_parser() -> argparse.ArgumentParser:
     add_parser.add_argument(
         "--file", help="JSONファイルから読み込んで登録",
     )
+    add_parser.add_argument(
+        "--cleanup", action="store_true", help="登録完了後に scratch フォルダを空にする",
+    )
 
     # --- search コマンド ---
     search_parser = subparsers.add_parser("search", help="セマンティック検索")
@@ -141,6 +144,9 @@ def create_parser() -> argparse.ArgumentParser:
     # --- refs-add コマンド ---
     refs_add_parser = subparsers.add_parser("refs-add", help="参考文献を登録")
     refs_add_parser.add_argument("--file", required=True, help="JSONファイルから読み込んで登録")
+    refs_add_parser.add_argument(
+        "--cleanup", action="store_true", help="登録完了後に scratch フォルダを空にする",
+    )
 
     # --- refs-update コマンド ---
     refs_update_parser = subparsers.add_parser("refs-update", help="参考文献のステータスを更新")
@@ -150,6 +156,9 @@ def create_parser() -> argparse.ArgumentParser:
 
     # --- refs-stats コマンド ---
     subparsers.add_parser("refs-stats", help="参考文献の統計情報")
+
+    # --- cleanup コマンド ---
+    subparsers.add_parser("cleanup", help="scratch フォルダの中身を削除")
 
     return parser
 
@@ -282,6 +291,10 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
                 "message": "ノートを追加しました",
                 "note_id": added.id,
             })
+
+    # scratchフォルダの掃除
+    if hasattr(args, "cleanup") and args.cleanup:
+        cmd_cleanup(args, store)
 
 
 def cmd_search(args, store: NoteStore) -> None:
@@ -545,6 +558,26 @@ def cmd_stats(args, store: NoteStore) -> None:
     })
 
 
+def cmd_cleanup(args, store: NoteStore) -> None:
+    """scratch フォルダを空にする"""
+    import shutil
+    root = get_project_root()
+    scratch_dir = Path(root) / "scratch"
+    if scratch_dir.exists():
+        print(f"🧹 scratch/ フォルダを掃除しています...", file=sys.stderr)
+        for item in scratch_dir.iterdir():
+            try:
+                if item.is_file():
+                    item.unlink()
+                elif item.is_dir():
+                    shutil.rmtree(item)
+            except Exception as e:
+                print(f"⚠️ 削除失敗: {item} - {e}", file=sys.stderr)
+        print("✅ scratch/ フォルダを空にしました。", file=sys.stderr)
+    else:
+        print("ℹ️ scratch/ フォルダが存在しません。", file=sys.stderr)
+
+
 def cmd_reindex(args, store: NoteStore) -> None:
     """リインデックスコマンド"""
     count = store.reindex()
@@ -772,6 +805,10 @@ def cmd_refs_add(args, ref_store: ReferenceStore, note_store: NoteStore) -> None
         "skipped_already_analyzed": skipped_dup_note,
     })
 
+    # scratchフォルダの掃除
+    if hasattr(args, "cleanup") and args.cleanup:
+        cmd_cleanup(args, note_store)
+
 
 def cmd_refs_update(args, ref_store: ReferenceStore) -> None:
     """参考文献ステータス更新コマンド"""
@@ -854,6 +891,7 @@ def main() -> None:
         "serve": cmd_serve,
         "get": cmd_get,
         "delete": cmd_delete,
+        "cleanup": cmd_cleanup,
     }
 
     # コマンドディスパッチ

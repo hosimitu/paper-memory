@@ -23,8 +23,8 @@ $env:COLORTERM = "truecolor"             # True color (24-bit) 警告対策
 # 3. スクリプトがある場所にカレントディレクトリを変更
 Set-Location $PSScriptRoot
 
-Write-Host "Geminiを起動します..." -ForegroundColor Cyan
+Write-Host "FastAPIサーバーを起動します..." -ForegroundColor Cyan
 Write-Host "作業ディレクトリ: $PSScriptRoot" -ForegroundColor Gray
 
-# 4. Geminiを起動
-pwsh -NoExit -Command "gemini"
+# 4. FastAPIサーバーをバックグラウンドで起動
+pwsh -NoExit -Command "python -m paper_memory serve"
