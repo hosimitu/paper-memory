@@ -246,19 +246,11 @@ def fix_table_with_llm(table_md):
         # 処理速度と精度のバランスから gemini-3-flash-preview を使用
         model = genai.GenerativeModel("gemini-3-flash-preview")
         
-        prompt = f"""
-        以下のMarkdown表は、PDFから抽出された際にセル結合（特に縦方向のマージ）が正しく処理されず、
-        1つのセル内に複数の値が '<br>' で詰め込まれてレイアウトが崩れています。
+        # プロンプトを読み込み
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+        from paper_memory.prompts import get_table_fix_prompt
+        prompt = get_table_fix_prompt(table_md)
 
-        この表を、正しく列が分割されたフラットなMarkdown表として再構築してください。
-        - 複数の値が '<br>' で結合されている場合は、適切な行と列に分割してください。
-        - 欠落しているヘッダーや列のズレがあれば修正してください。
-        - マークダウンの表の形式（|---|---|）を厳密に守ってください。
-        - 修正後のMarkdown表「のみ」を出力してください。それ以外の挨拶や説明は一切不要です。
-
-        元の崩れた表:
-        {table_md}
-        """
         
         response = model.generate_content(prompt)
         result = response.text.strip()

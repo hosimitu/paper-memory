@@ -68,29 +68,9 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
         })
     candidates_json = json.dumps(candidates_simplified, ensure_ascii=False, indent=2)
 
-    prompt = f"""
-あなたは学術論文の知識データベースにおける「Zettelkasten」のリンク構築アシスタントです。
-以下の「ターゲットノート」と、関連する可能性のある「候補ノート」のリストを読み、
-意味的・論理的な繋がり（補完、対立、前提、応用など）がある候補ノートを特定してください。
-単なるキーワードの一致ではなく、「この2つを繋ぐことで新たな知見や文脈が生まれるか」を重視してください。
+    from .prompts import get_autolink_prompt
+    prompt = get_autolink_prompt(target_json, candidates_json)
 
-出力は以下のJSONスキーマに従う配列（リスト）のみを出力してください（Markdownの```jsonなどの修飾は不要です）。
-[
-  {{
-    "target_id": "候補ノートのID",
-    "is_linked": true,
-    "reason": "関連する理由（日本語で、簡潔に1〜2文で）"
-  }}
-]
-関連がない場合は is_linked を false にしてください。必ず候補ノートの数と同じ要素数の配列を返してください。
-
----
-ターゲットノート:
-{target_json}
-
-候補ノートリスト:
-{candidates_json}
-"""
     try:
         response = model.generate_content(
             prompt,
