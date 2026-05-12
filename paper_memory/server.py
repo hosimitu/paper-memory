@@ -272,31 +272,9 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         
                     context_str = "\n".join(context_lines)
                     
-                    prompt = f"""あなたは研究を支援するアシスタントです。
-以下の「提供された知識ノート」のみを情報源として、ユーザーの質問に日本語で回答してください。
+                    from .prompts import get_qa_assistant_prompt
+                    prompt = get_qa_assistant_prompt(context_str, query_text)
 
-## 出力ルール（重要）:
-1. 回答の直前に必ず「===回答開始===」というマーカーを1行で出力し、その次の行から実際の回答本文を書き始めてください。
-2. 知識ノートに記載されていない推測や一般的な知識は、絶対に含めないでください。
-3. 提供された情報で回答できない場合は、「提供された情報からは分かりません」と回答してください。
-4. 回答文の中に、根拠となる情報源の番号を [1] のように付与してください。
-5. 末尾に文献リストを含めないでください。
-
-## 出力例:
-（ここに思考プロセスがあっても構いません）
-===回答開始===
-提供された情報に基づく回答は以下の通りです。
-
-* 手法A: 〇〇による薄膜化が可能です [1]。
-* 手法B: △△を用いることで... [2]。
-
----
-[提供された知識ノート]
-{context_str}
-
-[ユーザーの質問]
-{query_text}
-"""
                     
                     # 3. LLM呼び出し
                     import google.generativeai as genai
