@@ -23,6 +23,8 @@ try:
 except ImportError:
     genai = None
 
+from .ai_models import AUTOLINK_MODEL
+
 def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]:
     """
     ターゲットノートと候補ノートのリストを受け取り、意味的な繋がりをLLMで評価する。
@@ -51,7 +53,7 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
 
     genai.configure(api_key=api_key)
     # 評価には高速かつ安価なモデルを使用
-    model = genai.GenerativeModel('gemini-3.1-flash-lite')
+    model = genai.GenerativeModel(AUTOLINK_MODEL)
 
     # ノート情報をLLMに渡すために整形
     target_json = json.dumps(target_note, ensure_ascii=False, indent=2)

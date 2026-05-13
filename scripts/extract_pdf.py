@@ -243,12 +243,15 @@ def fix_table_with_llm(table_md):
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        # 処理速度と精度のバランスから gemini-3-flash-preview を使用
-        model = genai.GenerativeModel("gemini-3-flash-preview")
         
-        # プロンプトを読み込み
+        # プロンプトとモデル設定を読み込み
         sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
         from paper_memory.prompts import get_table_fix_prompt
+        from paper_memory.ai_models import EXTRACTION_MODEL
+        
+        # 処理速度と精度のバランスから EXTRACTION_MODEL を使用
+        model = genai.GenerativeModel(EXTRACTION_MODEL)
+        
         prompt = get_table_fix_prompt(table_md)
 
         
