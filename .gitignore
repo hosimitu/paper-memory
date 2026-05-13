@@ -59,4 +59,7 @@ extracted/
 Thumbs.db
 *.swp
 *.bak
+
+# --- エージェント・ワークフロー (外部リポジトリ) ---
 .agent/
+_agent/
