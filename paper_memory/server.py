@@ -26,6 +26,7 @@ import hashlib
 from pathlib import Path
 from .store import NoteStore
 from .reference import ReferenceStore
+from .ai_models import QA_MODEL
 import datetime
 
 # レート制限管理 (RPM)
@@ -286,7 +287,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     
                     genai.configure(api_key=api_key)
                     # ユーザー指定のモデルを使用
-                    model = genai.GenerativeModel('gemini-3.1-flash-lite')
+                    model = genai.GenerativeModel(QA_MODEL)
                     
                     # リクエスト履歴を記録
                     global API_USAGE_LOG

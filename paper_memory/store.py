@@ -28,6 +28,7 @@ from typing import Optional
 
 from .note import PaperNote, SourcePaper
 from .database import Database
+from .ai_models import EMBEDDING_MODEL
 
 
 class NoteStore:
@@ -527,7 +528,7 @@ class NoteStore:
             if api_key:
                 gemini_ef = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
                     api_key=api_key,
-                    model_name="models/gemini-embedding-2"
+                    model_name=EMBEDDING_MODEL
                 )
                 self._chroma_collection = self._chroma_client.get_or_create_collection(
                     name="paper_notes_gemini2",
