@@ -51,7 +51,7 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
 
     genai.configure(api_key=api_key)
     # 評価には高速かつ安価なモデルを使用
-    model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+    model = genai.GenerativeModel('gemini-3.1-flash-lite')
 
     # ノート情報をLLMに渡すために整形
     target_json = json.dumps(target_note, ensure_ascii=False, indent=2)
