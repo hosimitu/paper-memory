@@ -1,9 +1,7 @@
 chromadb
 google-generativeai
 python-dotenv
-pymupdf4llm
-pymupdf
-img2table
-opencv-python-headless
-pandas
 pypdf
+docling
+docling-core
+Pillow

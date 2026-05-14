@@ -93,3 +93,43 @@ def get_autolink_prompt(target_json: str, candidates_json: str) -> str:
 候補ノートリスト:
 {candidates_json}
 """
+
+
+def get_table_image_analysis_prompt() -> str:
+    """
+    [使用箇所] paper_memory/extractors/docling_backend.py -> _analyze_table_images()
+    [用途] PDFから抽出した表の画像を LLM で解析し、構造化 Markdown 表に変換する
+    """
+    return """この画像は研究論文のPDFから抽出した表（テーブル）です。
+画像を注意深く解析し、表の内容を正確な Markdown 表形式に変換してください。
+
+## 重要ルール（最優先）:
+- べき乗の指数部や単位に含まれる「負の符号（-）」を絶対に見落とさないでください。
+  - 例: `s⁻¹` や `s^-1` は `s<sup>-1</sup>` と正確に記述する。
+  - 例: `10⁻³` は `10<sup>-3</sup>` と記述する。
+- 数値の符号、小数点の位置、指数表記（10^n）を正確に転写してください。
+
+## 基本ルール:
+- 表のヘッダー行を正確に特定してください。
+- セル内のテキストを正確に転写してください（数値、単位、上付き・下付き文字を含む）。
+- 下付き文字（例: CO₂ の ₂）は `<sub>2</sub>` 形式、上付き文字は `<sup>a</sup>` 形式で表現してください。
+- 結合セル（縦・横）は適切に展開し、フラットな表に変換してください。
+- `|` を含むセル内容は `\\|` とエスケープしてください。
+- Markdown 表の形式（`| --- |`）を厳密に守ってください。
+- 変換後の Markdown 表「のみ」を出力してください。説明文や挨拶は一切不要です。
+"""
+
+def get_formula_image_analysis_prompt() -> str:
+    """
+    [使用箇所] paper_memory/extractors/docling_backend.py -> _analyze_formula_images()
+    [用途] PDFから抽出した数式の画像を LLM で解析し、LaTeX形式（Markdown内）に変換する
+    """
+    return r"""この画像は研究論文から抽出された数式（または化学反応式）です。
+画像を注意深く解析し、正確な LaTeX 形式に変換してください。
+
+## ルール:
+- 出力は `$$ ... $$` または `$ ... $` 形式の Markdown 数式として出力してください。
+- 化学反応式の場合、矢印（\rightarrow, \leftrightarrow）や、上下付き文字、電荷（^+, -）を正確に再現してください。
+- 可能な限り、標準的な LaTeX 記法を使用してください。
+- 変換後の数式「のみ」を出力してください。説明文や挨拶は一切不要です。
+"""
