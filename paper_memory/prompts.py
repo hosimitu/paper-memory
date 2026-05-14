@@ -81,7 +81,10 @@ def get_autolink_prompt(target_json: str, candidates_json: str) -> str:
   {{
     "target_id": "候補ノートのID",
     "is_linked": true,
-    "reason": "関連する理由（日本語で、簡潔に1〜2文で）"
+    "reason": {{
+      "en": "Brief reason for the link in English",
+      "ja": "関連する理由（日本語で、簡潔に1〜2文で）"
+    }}
   }}
 ]
 関連がない場合は is_linked を false にしてください。必ず候補ノートの数と同じ要素数の配列を返してください。

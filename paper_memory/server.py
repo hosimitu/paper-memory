@@ -89,10 +89,18 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                             for l_id in note.links:
                                 l_note = store.get(l_id)
                                 if l_note:
+                                    # リンク理由の取得
+                                    link_reason = ""
+                                    for h in reversed(note.evolution_history):
+                                        if h.get("action") == "link_added" and h.get("target_id") == l_id:
+                                            link_reason = h.get("reason", "")
+                                            break
+                                    
                                     linked_notes.append({
                                         "id": l_note.id,
                                         "content": l_note.content[:100] + "...",
-                                        "element_type": l_note.element_type
+                                        "element_type": l_note.element_type,
+                                        "reason": link_reason
                                     })
                             res_data["linked_notes_info"] = linked_notes
                             data = res_data

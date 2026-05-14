@@ -157,10 +157,15 @@ class NoteStore:
                         reason = event.get("reason", "")
                         created_at = event.get("timestamp", created_at)
                         break
+                # 多言語対応: reason が dict 等の場合は JSON 文字列として保存
+                save_reason = reason
+                if not isinstance(reason, str):
+                    save_reason = json.dumps(reason, ensure_ascii=False)
+
                 cur.execute("""
                 INSERT INTO note_links (source_id, target_id, reason, created_at)
                 VALUES (?, ?, ?, ?)
-                """, (note.id, target_id, reason, created_at))
+                """, (note.id, target_id, save_reason, created_at))
             conn.commit()
 
     # ========================================

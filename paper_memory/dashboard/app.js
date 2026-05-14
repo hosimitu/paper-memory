@@ -4,17 +4,17 @@
 
 const API_BASE = '/api';
 
-const TYPE_LABELS = {
-    background: '背景・先行研究',
-    method: '手法・アプローチ',
-    result: '結果・データ',
-    discussion: '考察・解釈',
-    conclusion: '結論',
-    insight: '著者の洞察',
-    limitation: '限界・課題',
-    future_work: '今後の展望',
-    definition: '定義'
-};
+const getTypeLabels = () => ({
+    background: i18n.t('type.background'),
+    method: i18n.t('type.method'),
+    result: i18n.t('type.result'),
+    discussion: i18n.t('type.discussion'),
+    conclusion: i18n.t('type.conclusion'),
+    insight: i18n.t('type.insight'),
+    limitation: i18n.t('type.limitation'),
+    future_work: i18n.t('type.future_work'),
+    definition: i18n.t('type.definition')
+});
 
 const TYPE_COLORS = {
     background: 'var(--color-background)',
@@ -34,6 +34,7 @@ class App {
         this.navItems = document.querySelectorAll('.nav-item');
         this.themeToggle = document.getElementById('theme-toggle');
         this.noteModal = document.getElementById('note-modal');
+        this.langSelector = document.getElementById('lang-selector');
 
         this.currentView = 'overview';
         this.cache = {};
@@ -83,6 +84,16 @@ class App {
             document.body.classList.add('light-mode');
         }
 
+        // Language selector setup
+        if (this.langSelector) {
+            this.langSelector.value = i18n.currentLang();
+            this.langSelector.addEventListener('change', (e) => {
+                i18n.setLanguage(e.target.value);
+            });
+        }
+
+        i18n.applyTranslations();
+
         // Initial view
         this.switchView('overview', {}, false);
 
@@ -108,12 +119,12 @@ class App {
 
         // Set title
         const titles = {
-            overview: '概要',
-            notes: '知識ノート',
-            papers: '登録論文',
-            references: '参考文献',
-            search: 'セマンティック検索',
-            qa: 'AIアシスタント'
+            overview: i18n.t('nav.overview'),
+            notes: i18n.t('nav.notes'),
+            papers: i18n.t('nav.papers'),
+            references: i18n.t('nav.references'),
+            search: i18n.t('nav.search'),
+            qa: i18n.t('nav.qa')
         };
         this.viewTitle.innerText = titles[view] || 'Paper Memory';
 
@@ -129,7 +140,7 @@ class App {
             }
         } catch (err) {
             console.error(err);
-            this.contentArea.innerHTML = `<div class="error-msg">データの取得に失敗しました: ${err.message}</div>`;
+            this.contentArea.innerHTML = `<div class="error-msg">${i18n.t('error.fetch_failed', { message: err.message })}</div>`;
         }
 
         lucide.createIcons();
@@ -143,10 +154,10 @@ class App {
         const content = template.content.cloneNode(true);
 
         // Fill stats
-        content.getElementById('stat-total-notes').innerText = stats.notes.total_notes;
-        content.getElementById('stat-total-papers').innerText = stats.notes.total_papers;
-        content.getElementById('stat-total-links').innerText = stats.notes.total_links;
-        content.getElementById('stat-total-refs').innerText = stats.references.total_unread;
+        content.querySelector('#stat-total-notes').innerText = stats.notes.total_notes;
+        content.querySelector('#stat-total-papers').innerText = stats.notes.total_papers;
+        content.querySelector('#stat-total-links').innerText = stats.notes.total_links;
+        content.querySelector('#stat-total-refs').innerText = stats.references.total_unread;
 
         // Click handlers for stat cards
         content.querySelectorAll('.stat-card').forEach(card => {
@@ -157,12 +168,13 @@ class App {
         });
 
         // Type distribution
-        const distArea = content.getElementById('type-distribution');
+        const distArea = content.querySelector('#type-distribution');
+        const typeLabels = getTypeLabels();
         for (const [type, count] of Object.entries(stats.notes.type_distribution)) {
             const tag = document.createElement('div');
             tag.className = 'type-tag';
             tag.style.borderLeft = `4px solid ${TYPE_COLORS[type] || '#ccc'}`;
-            tag.innerHTML = `<span>${TYPE_LABELS[type] || type}</span> <strong>${count}</strong>`;
+            tag.innerHTML = `<span>${typeLabels[type] || type}</span> <strong>${count}</strong>`;
 
             tag.addEventListener('click', () => {
                 this.switchView('notes', { type: type });
@@ -172,7 +184,7 @@ class App {
         }
 
         // Recent notes
-        const recentArea = content.getElementById('recent-notes');
+        const recentArea = content.querySelector('#recent-notes');
         const notes = await this.fetchJson('/notes');
         if (this.currentView !== 'overview') return;
 
@@ -183,7 +195,7 @@ class App {
                 item.className = 'note-card mini';
                 item.style.setProperty('--type-color', TYPE_COLORS[note.element_type] || '#ccc');
                 item.innerHTML = `
-                    <div class="note-header"><span class="note-type">${TYPE_LABELS[note.element_type]}</span></div>
+                    <div class="note-header"><span class="note-type">${typeLabels[note.element_type] || note.element_type}</span></div>
                     <div class="note-content">${note.content}</div>
                 `;
                 item.onclick = () => this.showNoteDetail(note.id);
@@ -191,6 +203,7 @@ class App {
             });
 
         this.contentArea.innerHTML = '';
+        i18n.applyTranslations(content);
         this.contentArea.appendChild(content);
     }
 
@@ -205,9 +218,9 @@ class App {
         if (paperId) {
             filterBar.innerHTML = `
                 <div style="display:flex; align-items:center; gap:16px; width:100%">
-                    <span style="font-weight:600; color:var(--accent)">論文フィルタ適用中</span>
+                    <span style="font-weight:600; color:var(--accent)">${i18n.t('filter.paper_applied')}</span>
                     <button class="type-filter-btn active" onclick="window.app.switchView('notes')">
-                        <i data-lucide="x" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i> フィルタ解除
+                        <i data-lucide="x" style="width:14px;height:14px;display:inline-block;vertical-align:middle"></i> ${i18n.t('filter.clear')}
                     </button>
                 </div>
             `;
@@ -216,11 +229,11 @@ class App {
             typeFilters.className = 'type-filters';
             const allBtn = document.createElement('button');
             allBtn.className = `type-filter-btn ${!filterType ? 'active' : ''}`;
-            allBtn.innerText = 'すべて';
+            allBtn.innerText = i18n.t('filter.all');
             allBtn.onclick = () => this.switchView('notes');
             typeFilters.appendChild(allBtn);
 
-            Object.entries(TYPE_LABELS).forEach(([type, label]) => {
+            Object.entries(getTypeLabels()).forEach(([type, label]) => {
                 const btn = document.createElement('button');
                 btn.className = `type-filter-btn ${filterType === type ? 'active' : ''}`;
                 btn.innerText = label;
@@ -234,7 +247,7 @@ class App {
         searchContainer.className = 'search-filter-container';
         searchContainer.innerHTML = `
             <i data-lucide="search" style="width:18px;height:18px"></i>
-            <input type="text" class="search-filter-input" placeholder="現在のリストから検索...">
+            <input type="text" class="search-filter-input" placeholder="${i18n.t('search.placeholder')}">
         `;
 
         filterBar.appendChild(searchContainer);
@@ -243,10 +256,10 @@ class App {
         let endpoint = '/notes';
         if (paperId) {
             endpoint = `/papers/${paperId}/notes`;
-            this.viewTitle.innerText = `ノート: ${params.title || '特定論文'}`;
+            this.viewTitle.innerText = `${i18n.t('nav.notes')}: ${params.title || ''}`;
         } else if (filterType) {
             endpoint += `?type=${encodeURIComponent(filterType)}`;
-            this.viewTitle.innerText = `知識ノート: ${TYPE_LABELS[filterType]}`;
+            this.viewTitle.innerText = `${i18n.t('nav.notes')}: ${getTypeLabels()[filterType]}`;
         }
 
         const notes = await this.fetchJson(endpoint);
@@ -256,16 +269,17 @@ class App {
         const renderList = (data) => {
             list.innerHTML = '';
             if (data.length === 0) {
-                list.innerHTML = '<div class="error-msg">ノートが見つかりませんでした</div>';
+                list.innerHTML = `<div class="error-msg">${i18n.t('search.not_found')}</div>`;
                 return;
             }
+            const typeLabels = getTypeLabels();
             data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).forEach(note => {
                 const card = document.createElement('div');
                 card.className = 'note-card';
                 card.style.setProperty('--type-color', TYPE_COLORS[note.element_type] || '#ccc');
                 card.innerHTML = `
                     <div class="note-header">
-                        <span class="note-type">${TYPE_LABELS[note.element_type]}</span>
+                        <span class="note-type">${typeLabels[note.element_type] || note.element_type}</span>
                         <span class="note-date">${new Date(note.timestamp).toLocaleDateString()}</span>
                     </div>
                     <div class="note-content">${note.content}</div>
@@ -301,8 +315,9 @@ class App {
 
         const note = await this.fetchJson(`/notes/${noteId}`);
 
+        const typeLabels = getTypeLabels();
         const typeEl = document.getElementById('modal-type');
-        typeEl.innerText = TYPE_LABELS[note.element_type];
+        typeEl.innerText = typeLabels[note.element_type] || note.element_type;
         typeEl.style.color = TYPE_COLORS[note.element_type];
 
         document.getElementById('modal-paper-title').innerText = note.source_paper.title;
@@ -335,13 +350,19 @@ class App {
         const linksArea = document.getElementById('modal-links');
         linksArea.innerHTML = '';
         if (note.linked_notes_info && note.linked_notes_info.length > 0) {
+            const typeLabels = getTypeLabels();
             note.linked_notes_info.forEach(link => {
                 const card = document.createElement('div');
                 card.className = 'note-card mini';
                 card.style.setProperty('--type-color', TYPE_COLORS[link.element_type] || '#ccc');
+                
+                const translatedReason = i18n.getTranslatedString(link.reason);
+                const reasonHtml = translatedReason ? `<div class="note-reason" style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; font-style:italic;">"${translatedReason}"</div>` : '';
+
                 card.innerHTML = `
-                    <div class="note-header"><span class="note-type">${TYPE_LABELS[link.element_type]}</span></div>
+                    <div class="note-header"><span class="note-type">${typeLabels[link.element_type] || link.element_type}</span></div>
                     <div class="note-content">${link.content}</div>
+                    ${reasonHtml}
                 `;
                 card.onclick = (e) => {
                     e.stopPropagation();
@@ -350,7 +371,7 @@ class App {
                 linksArea.appendChild(card);
             });
         } else {
-            linksArea.innerHTML = '<p class="modal-text-small">関連ノートはありません</p>';
+            linksArea.innerHTML = `<p class="modal-text-small">${i18n.t('modal.no_links')}</p>`;
         }
 
         this.noteModal.classList.add('active');
@@ -369,8 +390,8 @@ class App {
             card.innerHTML = `
                 <h4>[${index + 1}] ${paper.title}</h4>
                 <div class="paper-meta">
-                    <p>著者: ${JSON.parse(paper.authors).join(', ')}</p>
-                    <p>年: ${paper.year || '不明'}</p>
+                    <p>${i18n.t('modal.authors') || 'Authors'}: ${JSON.parse(paper.authors).join(', ')}</p>
+                    <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
                     <p>DOI: ${doiLink}</p>
                 </div>
             `;
@@ -386,7 +407,7 @@ class App {
         // unread のものだけ表示
         const refs = allRefs.filter(r => r.status === 'unread');
 
-        this.contentArea.innerHTML = '<h3>未読参考文献</h3><div class="note-list"></div>';
+        this.contentArea.innerHTML = `<h3>${i18n.t('ref.unread_title')}</h3><div class="note-list"></div>`;
         const list = this.contentArea.querySelector('.note-list');
 
         refs.forEach(ref => {
@@ -398,8 +419,8 @@ class App {
                     <span class="note-type">${ref.relevance.toUpperCase()} RELEVANCE</span>
                 </div>
                 <h5 style="margin: 12px 0; line-height: 1.4;">${ref.title}</h5>
-                <p class="note-content">${ref.reason}</p>
-                <div class="note-footer">引用元: ${ref.cited_by}</div>
+                <p class="note-content">${i18n.getTranslatedString(ref.reason)}</p>
+                <div class="note-footer">${i18n.t('ref.source')}: ${ref.cited_by}</div>
             `;
             card.onclick = () => this.showReferenceDetail(ref);
             list.appendChild(card);
@@ -421,10 +442,10 @@ class App {
         if (doi) {
             doiArea.innerHTML = `DOI: <a href="https://doi.org/${doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${doi}</a>`;
         } else {
-            doiArea.innerHTML = 'DOI: 不明';
+            doiArea.innerHTML = `DOI: ${i18n.t('status.disconnected').includes('切断') ? '不明' : 'Unknown'}`;
         }
 
-        document.getElementById('modal-content-full').innerText = ref.reason;
+        document.getElementById('modal-content-full').innerText = i18n.getTranslatedString(ref.reason);
 
         const kwArea = document.getElementById('modal-keywords');
         kwArea.innerHTML = '';
@@ -448,9 +469,9 @@ class App {
         }
 
         document.getElementById('modal-context').innerHTML = `
-            <strong>引用元:</strong> ${citedByHtml}<br>
-            <strong>ジャーナル:</strong> ${ref.journal || '-'}<br>
-            <strong>出版年:</strong> ${ref.year || '-'}
+            <strong>${i18n.t('ref.source')}:</strong> ${citedByHtml}<br>
+            <strong>${i18n.t('ref.journal')}:</strong> ${ref.journal || '-'}<br>
+            <strong>${i18n.t('ref.year')}:</strong> ${ref.year || '-'}
         `;
 
         document.getElementById('modal-links').innerHTML = '';
@@ -463,7 +484,7 @@ class App {
         const btnDismiss = document.getElementById('btn-dismiss-ref');
 
         btnDismiss.onclick = () => {
-            if (confirm('この参考文献をリストから除外しますか？\n（将来、別の論文から引用された場合には自動的に再表示されます）')) {
+            if (confirm(i18n.t('ref.confirm_dismiss'))) {
                 this.updateReferenceStatus(ref.id, 'dismissed');
             }
         };
@@ -488,7 +509,7 @@ class App {
             delete this.cache['/stats'];
             this.switchView('references');
         } catch (err) {
-            alert(`エラーが発生しました: ${err.message}`);
+            alert(i18n.t('error.alert', { message: err.message }));
         }
     }
 
@@ -496,24 +517,24 @@ class App {
         this.contentArea.innerHTML = `
             <div class="search-page">
                 <div class="search-guide">
-                    <h3><i data-lucide="sparkles"></i> 意味で探すセマンティック検索</h3>
-                    <p>キーワードの完全一致だけでなく、言葉の「意味」の近さで知識を検索します。文章のような自然なクエリでも関連するノートを見つけ出せます。</p>
+                    <h3><i data-lucide="sparkles"></i> ${i18n.t('search.guide.title')}</h3>
+                    <p>${i18n.t('search.guide.desc')}</p>
                     <ul>
-                        <li><strong>概念検索</strong>: 「膜の劣化メカニズム」など、特定の事象やメカニズムについて探す</li>
-                        <li><strong>横断比較</strong>: 「透過係数の測定条件」など、異なる論文の共通項目を比較する</li>
-                        <li><strong>キモの特定</strong>: 「著者の独創的なアイデア」などで検索し、研究の核心を突く</li>
+                        <li>${i18n.t('search.guide.li1')}</li>
+                        <li>${i18n.t('search.guide.li2')}</li>
+                        <li>${i18n.t('search.guide.li3')}</li>
                     </ul>
                 </div>
                 
                 <div class="search-container-large">
                     <i data-lucide="search" class="search-icon-large"></i>
-                    <input type="text" id="search-input" placeholder="知識を意味で検索（例：膜分離の性能限界）..." class="search-box-large">
+                    <input type="text" id="search-input" placeholder="${i18n.t('search.input_placeholder')}" class="search-box-large">
                 </div>
-                <p class="search-hint">Enterキーで検索を実行します</p>
+                <p class="search-hint">${i18n.t('search.hint')}</p>
 
                 <div class="search-settings">
                     <div class="threshold-control">
-                        <label for="threshold-slider">関連度の閾値 (低いほど厳密):</label>
+                        <label for="threshold-slider">${i18n.t('search.threshold')}</label>
                         <input type="range" id="threshold-slider" class="threshold-slider" min="0.2" max="0.8" step="0.05" value="0.45">
                         <span id="threshold-display" class="threshold-value">0.45</span>
                     </div>
@@ -552,21 +573,21 @@ class App {
             <div class="search-page">
                 <div class="qa-section dashboard-section" style="padding: 24px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <h3><i data-lucide="bot"></i> AIアシスタント（過去の知識への質問）</h3>
+                        <h3><i data-lucide="bot"></i> ${i18n.t('qa.title')}</h3>
                         <div id="qa-rate-limit" class="status-badge" style="background: var(--bg-secondary); color: var(--text-light); font-size: 0.8rem; padding: 4px 12px; border-radius: 20px;">
-                            API使用状況: 取得中...
+                            ${i18n.t('qa.rate_limit')}
                         </div>
                     </div>
-                    <p class="search-hint">蓄積されたノートをもとにAIが回答を生成します。推測を排除し、情報源を明示します。</p>
+                    <p class="search-hint">${i18n.t('qa.hint')}</p>
                     <div class="search-container-large" style="margin-top: 16px;">
                         <i data-lucide="message-circle" class="search-icon-large"></i>
-                        <input type="text" id="qa-input" placeholder="AIに質問する（例：最も透過率が高い膜は何ですか？）..." class="search-box-large">
-                        <button id="qa-btn" class="action-btn" style="margin-left: 12px; padding: 0 24px; height: 100%;">質問</button>
+                        <input type="text" id="qa-input" placeholder="${i18n.t('qa.input_placeholder')}" class="search-box-large">
+                        <button id="qa-btn" class="action-btn" style="margin-left: 12px; padding: 0 24px; height: 100%;">${i18n.t('qa.btn')}</button>
                     </div>
 
                     <div class="search-settings" style="margin-top: 16px; margin-bottom: 0;">
                         <div class="threshold-control">
-                            <label for="qa-threshold-slider">関連度の閾値 (低いほど厳密):</label>
+                            <label for="qa-threshold-slider">${i18n.t('search.threshold')}</label>
                             <input type="range" id="qa-threshold-slider" class="threshold-slider" min="0.2" max="0.8" step="0.05" value="0.45">
                             <span id="qa-threshold-display" class="threshold-value">0.45</span>
                         </div>
@@ -576,11 +597,11 @@ class App {
 
                     <div id="qa-history-container" class="qa-history-section">
                         <div class="qa-history-header">
-                            <h3><i data-lucide="history"></i> 過去の質問履歴 (最新10件)</h3>
-                            <button id="clear-qa-history" class="action-btn dismiss" style="font-size: 0.8rem; padding: 4px 12px;">すべての履歴を消去</button>
+                            <h3><i data-lucide="history"></i> ${i18n.t('qa.history')}</h3>
+                            <button id="clear-qa-history" class="action-btn dismiss" style="font-size: 0.8rem; padding: 4px 12px;">${i18n.t('qa.clear_history')}</button>
                         </div>
                         <div id="qa-history-list" class="qa-history-list">
-                            <div style="color: var(--text-light); font-size: 0.9rem;">履歴を読み込み中...</div>
+                            <div style="color: var(--text-light); font-size: 0.9rem;">${i18n.t('qa.loading_history')}</div>
                         </div>
                     </div>
                 </div>
@@ -615,7 +636,7 @@ class App {
 
         // 履歴消去ボタン
         document.getElementById('clear-qa-history').addEventListener('click', async () => {
-            if (confirm('質問履歴をすべて消去しますか？')) {
+            if (confirm(i18n.t('qa.confirm_clear'))) {
                 await fetch(API_BASE + '/qa/history/clear', { method: 'POST' });
                 this.loadQAHistory();
             }
@@ -631,7 +652,7 @@ class App {
             .then(data => {
                 if (data.api_usage) {
                     const badge = document.getElementById('qa-rate-limit');
-                    if (badge) badge.innerText = `API使用状況: ${data.api_usage.used} / ${data.api_usage.limit} RPM`;
+                    if (badge) badge.innerText = `${i18n.t('qa.rate_limit').split(':')[0]}: ${data.api_usage.used} / ${data.api_usage.limit} RPM`;
                 }
             });
 
@@ -644,7 +665,7 @@ class App {
 
         if (!isAppend) {
             this.qaHistoryOffset = 0;
-            listArea.innerHTML = '<div style="color: var(--text-light); font-size: 0.9rem;">履歴を読み込み中...</div>';
+            listArea.innerHTML = `<div style="color: var(--text-light); font-size: 0.9rem;">${i18n.t('qa.loading_history')}</div>`;
         }
 
         try {
@@ -658,7 +679,7 @@ class App {
             if (existingMoreBtn) existingMoreBtn.remove();
 
             if ((!history || history.length === 0) && !isAppend) {
-                listArea.innerHTML = '<div style="color: var(--text-light); font-size: 0.9rem;">履歴はありません。</div>';
+                listArea.innerHTML = `<div style="color: var(--text-light); font-size: 0.9rem;">${i18n.t('qa.no_history')}</div>`;
                 return;
             }
 
@@ -681,14 +702,14 @@ class App {
                     </div>
                     <div class="qa-history-answer">${item.answer}</div>
                     <div class="qa-history-meta">
-                        ${date} | 閾値: ${item.threshold} | ${item.references.length}件の参照
+                        ${date} | ${i18n.t('search.threshold').split('(')[0].trim()}: ${item.threshold} | ${item.references.length}${currentLang === 'ja' ? '件' : ''} of references
                     </div>
                 `;
 
                 const deleteBtn = div.querySelector('.delete-history-btn');
                 deleteBtn.onclick = async (e) => {
                     e.stopPropagation();
-                    if (confirm('この質問履歴を削除しますか？')) {
+                    if (confirm(i18n.t('qa.confirm_delete'))) {
                         await fetch(`${API_BASE}/qa/history/${item.id}/delete`, { method: 'POST' });
                         this.loadQAHistory();
                     }
@@ -712,7 +733,7 @@ class App {
                 moreBtn.id = 'qa-history-more-btn';
                 moreBtn.className = 'action-btn';
                 moreBtn.style = 'width: 100%; justify-content: center; margin-top: 16px; background: var(--bg-secondary); border: 1px dashed var(--border); color: var(--text-secondary); font-size: 0.85rem;';
-                moreBtn.innerHTML = '<i data-lucide="chevron-down" style="width:16px;"></i> さらに過去の履歴を表示';
+                moreBtn.innerHTML = `<i data-lucide="chevron-down" style="width:16px;"></i> ${i18n.t('qa.more_history')}`;
                 moreBtn.onclick = () => this.loadQAHistory(true);
                 listArea.appendChild(moreBtn);
             }
@@ -737,7 +758,7 @@ class App {
         resultsArea.innerHTML = `
             <div class="qa-result-card" style="background: var(--bg-primary); border: 1px solid var(--accent); border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(56, 189, 248, 0.1);">
                 <div style="font-weight: 700; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                    <i data-lucide="help-circle"></i> 質問: ${query}
+                    <i data-lucide="help-circle"></i> ${i18n.t('qa.result.query')}: ${query}
                 </div>
                 <div class="modal-text-block markdown-content" style="font-size: 1.05rem; line-height: 1.8; color: var(--text-primary); margin-bottom: 24px;">
                     ${marked.parse(dedentedAnswer(answer))}
@@ -746,14 +767,14 @@ class App {
                 ${references.length > 0 ? `
                 <div class="qa-references">
                     <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 12px; border-top: 1px solid var(--border); padding-top: 16px;">
-                        <i data-lucide="library" style="width: 16px; vertical-align: middle; margin-right: 4px;"></i> 参照された知識ノート
+                        <i data-lucide="library" style="width: 16px; vertical-align: middle; margin-right: 4px;"></i> ${i18n.t('qa.result.ref_notes')}
                     </h4>
                     <div class="mini-note-list horizontal">
                         ${references.map(ref => `
                             <div class="note-card" style="min-width: 200px; max-width: 200px; padding: 12px; font-size: 0.85rem; cursor: pointer;" onclick="app.showNoteDetail('${ref.note_id}')">
                                 <div style="color: var(--accent); font-weight: 600; margin-bottom: 4px; line-height: 1.4;">[${ref.id}]<br>${ref.title}</div>
                                 <div style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; opacity: 0.8;">
-                                    ノート詳細を表示
+                                    ${i18n.t('qa.result.show_detail')}
                                 </div>
                             </div>
                         `).join('')}
@@ -771,7 +792,7 @@ class App {
         resultsArea.innerHTML = `
             <div class="loader-container" style="display:flex; flex-direction:column; gap:12px; align-items:center;">
                 <div class="loader"></div>
-                <div style="color:var(--text-light); font-size:0.9rem;">回答生成中...（閾値 ${threshold} でノートを検索中）</div>
+                <div style="color:var(--text-light); font-size:0.9rem;">${i18n.t('qa.generating', { threshold })}</div>
             </div>`;
 
         try {
@@ -791,17 +812,17 @@ class App {
             // レート制限表示の更新
             if (data.api_usage) {
                 const badge = document.getElementById('qa-rate-limit');
-                if (badge) badge.innerText = `API使用状況: ${data.api_usage.used} / ${data.api_usage.limit} RPM`;
+                if (badge) badge.innerText = `${i18n.t('qa.rate_limit').split(':')[0]}: ${data.api_usage.used} / ${data.api_usage.limit} RPM`;
             }
 
             if (data.answer) {
                 this.displayQAResult(query, data.answer, data.references || [], resultsArea);
                 this.loadQAHistory(); // 履歴を更新
             } else {
-                resultsArea.innerHTML = `<div class="error-msg">回答の取得に失敗しました</div>`;
+                resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: 'No answer returned' })}</div>`;
             }
         } catch (err) {
-            resultsArea.innerHTML = `<div class="error-msg">QA処理中にエラーが発生しました: ${err.message}</div>`;
+            resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: err.message })}</div>`;
         }
         lucide.createIcons();
     }
@@ -822,16 +843,16 @@ class App {
             resultsArea.innerHTML = '';
 
             if (results.length === 0) {
-                resultsArea.innerHTML = '<div class="error-msg">関連する知識は見つかりませんでした。閾値を上げて再試行してください。</div>';
+                resultsArea.innerHTML = `<div class="error-msg">${i18n.t('search.not_found')}</div>`;
                 return;
             }
 
             if (metaArea) {
-                metaArea.innerText = `${results.length} 件の関連ノートが見つかりました（閾値: ${threshold}）`;
+                metaArea.innerText = `${results.length} ${currentLang === 'ja' ? '件の関連ノートが見つかりました' : 'notes found'} (${i18n.t('search.threshold').split('(')[0].trim()}: ${threshold})`;
             }
 
             // 要素タイプ順にソート（元々のロジックを維持）
-            const typeOrder = Object.keys(TYPE_LABELS);
+            const typeOrder = Object.keys(getTypeLabels());
             results.sort((a, b) => {
                 const orderA = typeOrder.indexOf(a.note.element_type);
                 const orderB = typeOrder.indexOf(b.note.element_type);
@@ -840,6 +861,7 @@ class App {
 
             results.forEach(res => {
                 const note = res.note;
+                const typeLabels = getTypeLabels();
                 // Cosine Distance をスコア（パーセント）に変換 (1 - distance) * 100
                 const score = res.distance !== null ? Math.round((1 - res.distance) * 100) : null;
 
@@ -848,8 +870,8 @@ class App {
                 card.style.setProperty('--type-color', TYPE_COLORS[note.element_type] || '#ccc');
                 card.innerHTML = `
                     <div class="note-header">
-                        <span class="note-type">${TYPE_LABELS[note.element_type]}</span>
-                        ${score !== null ? `<span class="score-badge">適合度: ${score}%</span>` : ''}
+                        <span class="note-type">${typeLabels[note.element_type] || note.element_type}</span>
+                        ${score !== null ? `<span class="score-badge">${currentLang === 'ja' ? '適合度' : 'Match'}: ${score}%</span>` : ''}
                     </div>
                     <div class="note-content">${note.content}</div>
                     <div class="note-footer">${note.source_paper.title}</div>
@@ -858,7 +880,7 @@ class App {
                 resultsArea.appendChild(card);
             });
         } catch (err) {
-            resultsArea.innerHTML = `<div class="error-msg">検索中にエラーが発生しました: ${err.message}</div>`;
+            resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: err.message })}</div>`;
         }
         lucide.createIcons();
     }
@@ -889,11 +911,15 @@ class App {
         const text = document.getElementById('server-status');
         if (isConnected) {
             badge.classList.remove('disconnected');
-            text.innerText = 'Connected';
+            text.innerText = i18n.t('status.connected');
         } else {
             badge.classList.add('disconnected');
-            text.innerText = 'Disconnected';
+            text.innerText = i18n.t('status.disconnected');
         }
+    }
+
+    onLanguageChange() {
+        this.switchView(this.currentView, this.currentParams, false);
     }
 }
 

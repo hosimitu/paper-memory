@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,42 +26,49 @@
             <nav class="sidebar-nav">
                 <a href="#" class="nav-item active" data-view="overview">
                     <i data-lucide="layout-dashboard"></i>
-                    <span>概要</span>
+                    <span data-i18n="nav.overview">概要</span>
                 </a>
                 <a href="#" class="nav-item" data-view="notes">
                     <i data-lucide="sticky-note"></i>
-                    <span>知識ノート</span>
+                    <span data-i18n="nav.notes">知識ノート</span>
                 </a>
                 <a href="#" class="nav-item" data-view="papers">
                     <i data-lucide="book-open"></i>
-                    <span>登録論文</span>
+                    <span data-i18n="nav.papers">登録論文</span>
                 </a>
                 <a href="#" class="nav-item" data-view="references">
                     <i data-lucide="library"></i>
-                    <span>参考文献</span>
+                    <span data-i18n="nav.references">参考文献</span>
                 </a>
                 <a href="#" class="nav-item" data-view="search">
                     <i data-lucide="search"></i>
-                    <span>セマンティック検索</span>
+                    <span data-i18n="nav.search">セマンティック検索</span>
                 </a>
                 <a href="#" class="nav-item" data-view="qa">
                     <i data-lucide="bot"></i>
-                    <span>AIアシスタント</span>
+                    <span data-i18n="nav.qa">AIアシスタント</span>
                 </a>
             </nav>
             <div class="sidebar-footer">
                 <button id="theme-toggle" class="theme-btn">
                     <i data-lucide="sun" class="sun-icon"></i>
                     <i data-lucide="moon" class="moon-icon"></i>
-                    <span>テーマ切替</span>
+                    <span data-i18n="nav.theme">テーマ切替</span>
                 </button>
+                <div class="lang-selector-container">
+                    <i data-lucide="languages" class="lang-icon"></i>
+                    <select id="lang-selector" class="lang-select">
+                        <option value="en">English</option>
+                        <option value="ja">日本語</option>
+                    </select>
+                </div>
             </div>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content">
             <header class="top-bar">
-                <h1 id="view-title">概要</h1>
+                <h1 id="view-title" data-i18n="nav.overview">概要</h1>
                 <div class="user-actions">
                     <div class="status-badge" id="connection-status">
                         <span class="status-dot"></span>
@@ -85,28 +92,28 @@
             <div class="stat-card" data-goto="notes">
                 <div class="stat-icon note-color"><i data-lucide="file-text"></i></div>
                 <div class="stat-info">
-                    <span class="stat-label">総ノート数</span>
+                    <span class="stat-label" data-i18n="stat.total_notes">総ノート数</span>
                     <span class="stat-value" id="stat-total-notes">-</span>
                 </div>
             </div>
             <div class="stat-card" data-goto="papers">
                 <div class="stat-icon paper-color"><i data-lucide="book"></i></div>
                 <div class="stat-info">
-                    <span class="stat-label">登録論文数</span>
+                    <span class="stat-label" data-i18n="stat.total_papers">登録論文数</span>
                     <span class="stat-value" id="stat-total-papers">-</span>
                 </div>
             </div>
             <div class="stat-card" data-goto="search">
                 <div class="stat-icon link-color"><i data-lucide="share-2"></i></div>
                 <div class="stat-info">
-                    <span class="stat-label">知識リンク数</span>
+                    <span class="stat-label" data-i18n="stat.total_links">知識リンク数</span>
                     <span class="stat-value" id="stat-total-links">-</span>
                 </div>
             </div>
             <div class="stat-card" data-goto="references">
                 <div class="stat-icon ref-color"><i data-lucide="bookmark"></i></div>
                 <div class="stat-info">
-                    <span class="stat-label">未読参考文献</span>
+                    <span class="stat-label" data-i18n="stat.unread_refs">未読参考文献</span>
                     <span class="stat-value" id="stat-total-refs">-</span>
                 </div>
             </div>
@@ -114,11 +121,11 @@
 
         <div class="dashboard-sections">
             <section class="dashboard-section chart-section">
-                <h3><i data-lucide="pie-chart"></i> 知識分布</h3>
+                <h3><i data-lucide="pie-chart"></i> <span data-i18n="section.distribution">知識分布</span></h3>
                 <div id="type-distribution" class="type-tags"></div>
             </section>
             <section class="dashboard-section recent-section">
-                <h3><i data-lucide="clock"></i> 最近追加された知識</h3>
+                <h3><i data-lucide="clock"></i> <span data-i18n="section.recent">最近追加された知識</span></h3>
                 <div id="recent-notes" class="mini-note-list"></div>
             </section>
         </div>
@@ -137,29 +144,30 @@
                 
                 <div class="modal-meta-grid">
                     <div class="modal-meta-section">
-                        <h4><i data-lucide="key"></i> キーワード</h4>
+                        <h4><i data-lucide="key"></i> <span data-i18n="modal.keywords">キーワード</span></h4>
                         <div id="modal-keywords" class="keyword-tags"></div>
                     </div>
                     <div class="modal-meta-section">
-                        <h4><i data-lucide="message-square"></i> 文脈・前提</h4>
+                        <h4><i data-lucide="message-square"></i> <span data-i18n="modal.context">文脈・前提</span></h4>
                         <div id="modal-context" class="modal-text-small"></div>
                     </div>
                 </div>
 
                 <div class="modal-links-section">
-                    <h4><i data-lucide="share-2"></i> 関連ノート</h4>
+                    <h4><i data-lucide="share-2"></i> <span data-i18n="modal.links">関連ノート</span></h4>
                     <div id="modal-links" class="mini-note-list horizontal"></div>
                 </div>
 
                 <div id="modal-actions" class="modal-actions" style="display:none; margin-top:32px; padding-top:24px; border-top:1px solid var(--border); display:flex; gap:12px; justify-content: flex-end;">
                     <button id="btn-dismiss-ref" class="action-btn dismiss">
-                        <i data-lucide="trash-2"></i> 参考文献から除外
+                        <i data-lucide="trash-2"></i> <span data-i18n="modal.dismiss">参考文献から除外</span>
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
+    <script src="i18n.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
