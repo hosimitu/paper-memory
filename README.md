@@ -23,7 +23,7 @@ A-Memの設計思想（Zettelkasten原則：原子性・リンキング・進化
 - **Webダッシュボード**: 蓄積された知識をブラウザ上で美しく視覚化し、直感的な探索が可能です。
 - **セマンティック検索**: Gemini Embedding (models/gemini-embedding-2) を用いた高性能なベクトル検索が可能です。
 - **DOIの自動取得・検証**: 論文解析や参考文献登録時、タイトルと著者情報をもとに Crossref / OpenAlex API を用いて正しい DOI を自動補完します。
-- **ハイブリッド解析**: `pymupdf4llm` によるテキスト抽出と `img2table` による高精度な表認識を組み合わせた強力なPDF解析。
+- **ハイブリッド解析**: `docling` をデフォルトとし、必要に応じて `pypdf` や `marker-pdf` などのバックエンドを切り替え可能な柔軟で強力なPDF解析。
 
 ```text
 [Gemini CLI (フロントエンド)]
@@ -64,26 +64,22 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 2. 高性能PDF解析機能の有効化
-本システムは、論文の図表・スタイルを正確に抽出するためにハイブリッド解析パイプラインを採用しています。
+### 2. 高性能PDF解析機能の利用
+本システムは、論文の図表・スタイルを正確に抽出するために複数の解析バックエンドを提供しています。
 
-- **標準（推奨）**: `pymupdf4llm` + `img2table`
-  本文・画像抽出に加え、画像処理ベースで表を正確に認識します。上付き・下付き文字も復元されます。
-- **高精度**: `marker-pdf`
-  複雑な LaTeX 数式をテキスト化したい場合に使用します（実行に時間がかかります）。
-
-```powershell
-# PDFをMarkdownに変換する例
-python scripts/extract_pdf.py "pdf/paper.pdf" "scratch/output.md" --use-pymupdf
-```
-
-### 3. データのマイグレーション (既存ユーザーのみ)
-既存の JSON データがある場合は、以下のコマンドで SQLite へ移行します。
+- **標準（推奨）**: `docling`
+  高速かつ高精度に本文や表、画像を抽出します。通常はこのバックエンドがデフォルトで使用されます。
+- **高精度**: `marker-pdf` (`--use-marker` フラグ)
+  複雑な LaTeX 数式などをテキスト化したい場合に使用します（実行に時間がかかります）。
+- **軽量**: `pypdf` (`--use-pypdf` フラグ)
+  プレーンテキストのみを高速に抽出したい場合のフォールバックです。
 
 ```powershell
-python -m paper_memory migrate --type notes
-python -m paper_memory migrate --type refs
+# PDFをMarkdownに変換して抽出する例
+python -m paper_memory extract "pdf/paper.pdf"
 ```
+
+
 
 ### 3. 環境変数の設定 (強く推奨)
 プロジェクトルートに `.env` ファイルを作成し、Gemini APIキーを設定します。
@@ -154,13 +150,13 @@ python -m paper_memory serve
 ## 🛠️ バックエンドCLI
 
 ```powershell
+python -m paper_memory extract "pdf/paper.pdf"            # PDFからのテキスト抽出
 python -m paper_memory stats                              # 統計情報の表示
 python -m paper_memory list [--paper "論文名"]             # 一覧
 python -m paper_memory search --query "検索クエリ"         # 検索
 python -m paper_memory serve [--port 8080]                # ダッシュボード起動
 python -m paper_memory autolink --paper-title "論文名"    # 自動リンク構築
 python -m paper_memory refs                               # 未読参考文献一覧
-python -m paper_memory migrate --type [notes|refs]        # JSONからDBへの移行
 python -m paper_memory cleanup                            # scratch/ の掃除
 ```
 

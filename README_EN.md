@@ -23,7 +23,7 @@ This system employs a hybrid architecture combining advanced text analysis via L
 - **Web Dashboard**: Beautiful browser-based visualization for intuitive knowledge exploration.
 - **Semantic Search**: High-performance vector search using Gemini Embeddings (`models/gemini-embedding-2`).
 - **Automatic DOI Fetching & Validation**: Automatically completes and validates DOIs using Crossref / OpenAlex APIs based on title and author metadata.
-- **Hybrid PDF Parsing**: Powerful extraction combining `pymupdf4llm` for text and `img2table` for high-precision table recognition.
+- **Flexible PDF Parsing**: Uses `docling` as the default for fast and high-precision extraction, with alternative backends (`pypdf`, `marker-pdf`) available.
 
 ```text
 [Gemini CLI (Frontend)]
@@ -154,7 +154,8 @@ You can call the Python helper directly for detailed data management.
 
 ### Knowledge Note Management
 ```powershell
-python -m paper_memory add --file scratch/notes.json     # Add notes from file
+python -m paper_memory extract "pdf/paper.pdf"            # Extract text from PDF
+python -m paper_memory add --file scratch/notes.json      # Add notes from file
 python -m paper_memory search --query "search query"      # Semantic search
 python -m paper_memory list [--paper "title"]             # List notes
 python -m paper_memory autolink --paper-title "title"     # AI-driven linking
