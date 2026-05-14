@@ -61,10 +61,9 @@ Thumbs.db
 *.swp
 *.bak
 .gemini/settings.json
+*.code-workspace
 
-# --- エージェント・ワークフロー (外部リポジトリから持ち込んだファイル) ---
 # .agents/rules/ と .agents/workflows/ は他リポジトリで管理するため除外
 .agents/rules/
 .agents/workflows/
 .agents/scratch/
-_agent/
