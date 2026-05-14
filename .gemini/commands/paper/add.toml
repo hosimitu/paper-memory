@@ -7,7 +7,7 @@ prompt = """
 
 1. **PDFを読み込む**: {{args}} で指定されたPDFファイルを解析してください
 2. **書誌情報を抽出**: タイトル、著者、年、DOI、ジャーナル名。また `pdf_path` には {{args}} の値を設定してください。
-3. **知識要素に分割**: GEMINI.mdのルールに従い、以下の要素タイプに分割:
+3. **知識要素に分割**: `.agents/skills/analyzing-papers/SKILL.md` のルールに従い、以下の要素タイプに分割:
    - background（背景・先行研究）
    - method（手法）
    - result（結果）
@@ -17,14 +17,10 @@ prompt = """
    - limitation（限界・課題）
    - future_work（今後の展望）
    - definition（重要な用語定義）
-4. **JSON生成**: GEMINI.mdのフォーマットに従ってJSONを生成
-5. **バックエンド登録**: 文字化けと引用符エラーを完全に回避するため、生成したJSON配列を **Base64エンコード** した上で、以下のコマンドを実行してください。
-   **PowerShellでの正しいエンコード手順**:
+4. **JSON生成**: `.agents/skills/analyzing-papers/SKILL.md` のフォーマットに従ってJSONを生成（チャット上には出力しないでください）
+5. **バックエンド登録**: 生成したJSONを `scratch/new_notes.json` にUTF-8で保存した上で、以下のコマンドを実行してください。
    ```powershell
-   $json = '<生成したJSON配列>'
-   $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-   $base64 = [Convert]::ToBase64String($bytes)
-   python -m paper_memory add --base64 $base64
+   python -m paper_memory add --file scratch/new_notes.json --cleanup
    ```
 6. **リンク生成**: 追加した各ノートについて近傍検索を行い、関連ノートにリンクを張る
    ```
