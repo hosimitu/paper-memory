@@ -105,6 +105,15 @@ def create_parser() -> argparse.ArgumentParser:
     autolink_parser.add_argument("--n", type=int, default=5, help="結果数（デフォルト: 5）")
     autolink_parser.add_argument("--yes", action="store_true", help="確認プロンプトをスキップしてすべて承認する")
     autolink_parser.add_argument("--quiet", action="store_true", help="詳細を表示せず、サマリーのみ出力する（ログにはすべて記録）")
+    # --- extract コマンド ---
+    extract_parser = subparsers.add_parser("extract", help="PDF からテキスト・画像を抽出して extracted/ に保存")
+    extract_parser.add_argument("pdf_path", help="入力 PDF ファイルのパス")
+    extract_parser.add_argument("--use-pypdf", action="store_true", help="pypdf バックエンドを使用（軽量フォールバック）")
+    extract_parser.add_argument("--use-marker", action="store_true", help="marker-pdf バックエンドを使用（高精度・低速）")
+    extract_parser.add_argument("--analyze-tables", action="store_true", help="表画像を LLM で解析して Markdown 表に変換する（docling のみ）")
+    extract_parser.add_argument("--light", action="store_true", help="marker バックエンドの軽量モード（CPU のみ・OCR なし）")
+    extract_parser.add_argument("--base-dir", default="extracted", help="出力先ベースディレクトリ（デフォルト: extracted）")
+
     # --- scan コマンド ---
     subparsers.add_parser("scan", help="pdf/ フォルダ内のファイルをスキャン")
 
@@ -908,6 +917,9 @@ def main() -> None:
         cmd_refs_update(args, ref_store)
     elif args.command == "refs-stats":
         cmd_refs_stats(args, ref_store)
+    elif args.command == "extract":
+        from .extractor import main_extract
+        main_extract(args)
     else:
         parser.print_help()
         sys.exit(1)

@@ -12,21 +12,13 @@ This project, **Paper Memory**, uses the following open-source software and thir
 - **License**: Apache License 2.0
 - **Description**: Google Generative AI SDK for Python.
 
-### [PyMuPDF](https://github.com/pymupdf/PyMuPDF) & [pymupdf4llm](https://github.com/pymupdf/pymupdf4llm)
-- **License**: GNU AGPL v3.0
-- **Description**: High-performance PDF parsing and Markdown conversion.
-
-### [img2table](https://github.com/xavctn/img2table)
+### [docling](https://github.com/DS4SD/docling) & [docling-core](https://github.com/DS4SD/docling-core)
 - **License**: MIT License
-- **Description**: Deep learning free table extraction from PDF and images.
+- **Description**: PDF and document parsing library with layout understanding, table extraction, and image export.
 
-### [opencv-python-headless](https://github.com/opencv/opencv-python)
-- **License**: Apache License 2.0
-- **Description**: Wrapper package for OpenCV python bindings (without GUI).
-
-### [pandas](https://github.com/pandas-dev/pandas)
-- **License**: BSD 3-Clause License
-- **Description**: Data structures and data analysis tools.
+### [Pillow](https://github.com/python-pillow/Pillow)
+- **License**: HPND License (Historical Permission Notice and Disclaimer)
+- **Description**: Python Imaging Library fork for image processing.
 
 ### [python-dotenv](https://github.com/theskumar/python-dotenv)
 - **License**: BSD 3-Clause License
@@ -41,17 +33,17 @@ This project, **Paper Memory**, uses the following open-source software and thir
 ## License Texts
 
 ### Apache License 2.0
-*(Applies to: chromadb, google-generativeai, opencv-python-headless)*
+*(Applies to: chromadb, google-generativeai)*
 A copy of the Apache License 2.0 can be found at: [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
-### GNU AGPL v3.0
-*(Applies to: PyMuPDF, pymupdf4llm)*
-A copy of the GNU Affero General Public License v3.0 can be found at: [https://www.gnu.org/licenses/agpl-3.0.html](https://www.gnu.org/licenses/agpl-3.0.html)
-
 ### MIT License
-*(Applies to: img2table)*
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files...
+*(Applies to: docling, docling-core)*
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+### HPND License
+*(Applies to: Pillow)*
+A copy of the HPND License can be found at: [https://opensource.org/licenses/HPND](https://opensource.org/licenses/HPND)
 
 ### BSD 3-Clause License
-*(Applies to: pandas, python-dotenv, pypdf)*
+*(Applies to: python-dotenv, pypdf)*
 A copy of the BSD 3-Clause License can be found at: [https://opensource.org/licenses/BSD-3-Clause](https://opensource.org/licenses/BSD-3-Clause)

@@ -51,6 +51,7 @@ _backup/
 notes/*.json
 references/*.json
 extracted/
+output/
 
 # --- エディタ・OS ---
 .vscode/
@@ -60,6 +61,8 @@ Thumbs.db
 *.swp
 *.bak
 
-# --- エージェント・ワークフロー (外部リポジトリ) ---
-.agent/
+# --- エージェント・ワークフロー (外部リポジトリから持ち込んだファイル) ---
+# .agents/rules/ と .agents/workflows/ は他リポジトリで管理するため除外
+.agents/rules/
+.agents/workflows/
 _agent/

@@ -13,6 +13,12 @@
 ## バックエンドコマンドリファレンス
 
 ```powershell
+# PDF からテキスト・画像を抽出（詳細は .agents/skills/analyzing-papers/ を参照）
+python -m paper_memory extract "pdf/paper.pdf"              # docling（デフォルト）
+python -m paper_memory extract "pdf/paper.pdf" --analyze-tables  # 表画像も LLM で解析
+python -m paper_memory extract "pdf/paper.pdf" --use-pypdf  # 軽量フォールバック
+python -m paper_memory extract "pdf/paper.pdf" --use-marker --light  # 高精度（低速）
+
 # ノートの追加（詳細な解析ルールは .agents/skills/analyzing-papers/ を参照）
 python -m paper_memory add --file scratch/new_notes.json --cleanup
 

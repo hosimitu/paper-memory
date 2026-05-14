@@ -17,10 +17,12 @@
 AI Models — プロジェクトで使用するAIモデル名の一元管理
 """
 
-# PDFからのテキストおよび表の抽出に使用するモデル
-# 処理速度と構造化データ抽出の精度のバランスから選択
-# [使用箇所] scripts/extract_pdf.py
-EXTRACTION_MODEL = "gemini-3-flash-preview"
+# PDFから抽出した表画像を LLM で解析し Markdown 表に変換するモデル
+# 高精度なマルチモーダル解析が必要なため Flash を使用
+# [使用箇所] paper_memory/extractors/docling_backend.py
+TABLE_IMAGE_MODEL = "gemini-3.1-flash-lite"
+# 数式画像を LLM で解析し LaTeX/Markdown に変換するモデル
+FORMULA_IMAGE_MODEL = "gemini-3.1-flash-lite"
 
 # セマンティック検索用のベクトル（埋め込み）生成に使用するモデル
 # [使用箇所] paper_memory/store.py
