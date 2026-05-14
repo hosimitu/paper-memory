@@ -799,7 +799,7 @@ class App {
             const res = await fetch(API_BASE + '/qa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, threshold, n: 15 })
+                body: JSON.stringify({ query, threshold, n: 15, lang: i18n.currentLang() })
             });
 
             const data = await res.json();

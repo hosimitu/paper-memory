@@ -234,8 +234,19 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
         paper_titles = set()
         for d in data:
             sp = d.get("source_paper", {})
-            if sp and sp.get("title"):
-                paper_titles.add((sp["title"], sp.get("doi", "")))
+            if not sp:
+                continue
+            
+            # SourcePaperオブジェクトか辞書かを確認
+            if hasattr(sp, "title"):
+                title = sp.title
+                doi = sp.doi if hasattr(sp, "doi") else ""
+            else:
+                title = sp.get("title", "")
+                doi = sp.get("doi", "")
+                
+            if title:
+                paper_titles.add((title, doi))
         for title, doi in paper_titles:
             cleaned_total += ref_store.mark_done_by_title(title, doi)
         if cleaned_total > 0:
