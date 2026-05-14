@@ -502,11 +502,16 @@ def cmd_autolink(args, store: NoteStore) -> None:
             candidate_dict = next((c for c in candidates if c["note"]["id"] == candidate_id), None)
             candidate_title = candidate_dict["note"]["source_paper"]["title"] if candidate_dict else "不明"
 
+            # CLI表示用に理由をパース
+            display_reason = reason
+            if isinstance(reason, dict):
+                display_reason = reason.get("ja") or reason.get("en") or str(reason)
+
             # 既にリンク済みかチェック（既存リンクの取得メソッドがない場合は store.add_link の戻り値で判断）
             if not args.quiet:
                 print("\n" + "="*50)
                 print(f"✨ リンク候補を発見: {note_id} <-> {candidate_id}")
-                print(f"📝 理由: {reason}")
+                print(f"📝 理由: {display_reason}")
                 print("="*50)
             
             # ログ記録

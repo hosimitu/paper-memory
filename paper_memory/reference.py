@@ -81,15 +81,31 @@ class ReferenceStore:
             cited_by=row["cited_by"] or "",
             cited_by_pdf=row["cited_by_pdf"] or "",
             relevance=row["relevance"],
-            reason=row["reason"] or "",
+            reason=self._parse_maybe_json(row["reason"]),
             keywords=json.loads(row["keywords"]) if row["keywords"] else [],
             status=row["status"],
             created_at=row["created_at"],
             updated_at=row["updated_at"]
         )
 
+    def _parse_maybe_json(self, val):
+        if not val:
+            return ""
+        try:
+            # 辞書型やリスト型としてパースを試みる
+            if val.strip().startswith(('{', '[')):
+                return json.loads(val)
+        except:
+            pass
+        return val
+
     def _save_ref(self, ref: Reference) -> None:
         with self.db.get_connection() as conn:
+            # 多言語対応: reason が dict 等の場合は JSON 文字列として保存
+            save_reason = ref.reason
+            if not isinstance(ref.reason, str):
+                save_reason = json.dumps(ref.reason, ensure_ascii=False)
+
             conn.execute("""
             INSERT INTO references_table (id, title, authors, year, doi, journal, cited_by, cited_by_pdf, relevance, reason, keywords, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -109,7 +125,7 @@ class ReferenceStore:
             """, (
                 ref.id, ref.title, json.dumps(ref.authors, ensure_ascii=False),
                 ref.year, ref.doi, ref.journal, ref.cited_by, ref.cited_by_pdf,
-                ref.relevance, ref.reason, json.dumps(ref.keywords, ensure_ascii=False),
+                ref.relevance, save_reason, json.dumps(ref.keywords, ensure_ascii=False),
                 ref.status, ref.created_at, ref.updated_at
             ))
             conn.commit()
