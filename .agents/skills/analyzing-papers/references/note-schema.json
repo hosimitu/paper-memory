@@ -1,19 +1,19 @@
 {
   "source_paper": {
-    "title": "論文タイトル（原語）",
-    "authors": ["著者1", "著者2"],
+    "title": "Paper Title (Original Language)",
+    "authors": ["Author 1", "Author 2"],
     "year": 2024,
-    "doi": "DOI（本文中に明記されている場合のみ。不明な場合は空文字にすること。APIで自動補完されるためWEB検索は不要）",
-    "journal": "ジャーナル/会議名",
-    "pdf_path": "pdf/ファイル名.pdf"
+    "doi": "DOI (Only if explicitly stated in the text. Leave empty if unknown. Do NOT search the web as it will be auto-completed by the API)",
+    "journal": "Journal / Conference Name",
+    "pdf_path": "pdf/filename.pdf"
   },
   "notes": [
     {
-      "content": "知識要素のテキスト（日本語で要約。重要な数値や具体的手法は必ず含めること）",
+      "content": "Text of the knowledge element (Summarized in English. MUST include important numerical values and specific methods)",
       "element_type": "method",
-      "keywords": ["キーワード1", "キーワード2", "キーワード3"],
-      "context": "この知識要素がどのような文脈で重要かの説明",
-      "tags": ["タグ1", "タグ2"]
+      "keywords": ["keyword 1 (in English)", "keyword 2", "keyword 3"],
+      "context": "Explanation of the context in which this knowledge element is important (in English)",
+      "tags": ["tag 1", "tag 2"]
     }
   ]
 }

@@ -219,7 +219,7 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
         # 個別のノートリストの場合（通常はsource_paperが含まれるはずだが）
         for d in data:
             sp = d.get("source_paper", {})
-            if sp and sp.get("title") and not sp.get("doi"):
+            if isinstance(sp, dict) and sp.get("title") and not sp.get("doi"):
                 print(f"🔍 メイン論文のDOIを検索中: {sp['title']}", file=sys.stderr)
                 doi = fetch_doi_by_title_and_authors(sp["title"], sp.get("authors"), sp.get("year"))
                 if doi:
@@ -234,8 +234,22 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
         paper_titles = set()
         for d in data:
             sp = d.get("source_paper", {})
-            if sp and sp.get("title"):
-                paper_titles.add((sp["title"], sp.get("doi", "")))
+            if not sp:
+                continue
+            
+            # SourcePaperオブジェクトか辞書かを確認
+            if hasattr(sp, "title"):
+                title = sp.title
+                doi = sp.doi if hasattr(sp, "doi") else ""
+            elif isinstance(sp, dict):
+                title = sp.get("title", "")
+                doi = sp.get("doi", "")
+            else:
+                title = str(sp)
+                doi = ""
+                
+            if title:
+                paper_titles.add((title, doi))
         for title, doi in paper_titles:
             cleaned_total += ref_store.mark_done_by_title(title, doi)
         if cleaned_total > 0:
@@ -252,7 +266,7 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
             source_paper = data["source_paper"]
             
             # DOI補完
-            if source_paper.get("title") and not source_paper.get("doi"):
+            if isinstance(source_paper, dict) and source_paper.get("title") and not source_paper.get("doi"):
                 print(f"🔍 メイン論文のDOIを検索中: {source_paper['title']}", file=sys.stderr)
                 doi = fetch_doi_by_title_and_authors(source_paper["title"], source_paper.get("authors"), source_paper.get("year"))
                 if doi:
@@ -279,7 +293,7 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
         else:
             # 単一のノートオブジェクトの場合
             sp = data.get("source_paper", {})
-            if sp and sp.get("title") and not sp.get("doi"):
+            if isinstance(sp, dict) and sp.get("title") and not sp.get("doi"):
                 print(f"🔍 メイン論文のDOIを検索中: {sp['title']}", file=sys.stderr)
                 doi = fetch_doi_by_title_and_authors(sp["title"], sp.get("authors"), sp.get("year"))
                 if doi:

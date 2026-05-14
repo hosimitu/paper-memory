@@ -104,6 +104,14 @@ class PaperNote:
         # SourcePaperのネスト処理
         if "source_paper" in data and isinstance(data["source_paper"], dict):
             data["source_paper"] = SourcePaper.from_dict(data["source_paper"])
+            
+        # element_typeのバリデーションと正規化
+        if "element_type" in data and isinstance(data["element_type"], str):
+            val = data["element_type"].lower()
+            if val not in ELEMENT_TYPES:
+                val = "other"
+            data["element_type"] = val
+            
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     @classmethod

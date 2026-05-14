@@ -276,13 +276,14 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         content = note["content"]
                         note_id = note["id"]
                         ref_num = i + 1
-                        context_lines.append(f"[{ref_num}] 論文: {title}\nノート内容: {content}\n")
+                        context_lines.append(f"[{ref_num}] Paper: {title}\nNote content: {content}\n")
                         references.append({"id": ref_num, "title": title, "note_id": note_id})
                         
                     context_str = "\n".join(context_lines)
                     
                     from .prompts import get_qa_assistant_prompt
-                    prompt = get_qa_assistant_prompt(context_str, query_text)
+                    lang = post_data.get("lang", "en")
+                    prompt = get_qa_assistant_prompt(context_str, query_text, lang)
 
                     
                     # 3. LLM呼び出し
@@ -307,11 +308,17 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     answer_text = response.text
                     if "===回答開始===" in answer_text:
                         answer_text = answer_text.split("===回答開始===")[-1].strip()
+                    elif "===Answer Start===" in answer_text:
+                        answer_text = answer_text.split("===Answer Start===")[-1].strip()
                     elif "提供された情報に" in answer_text:
                         # マーカーがない場合のフォールバック（最初の日本語らしい文から）
                         parts = answer_text.split("提供された情報に", 1)
                         if len(parts) > 1:
                             answer_text = "提供された情報に" + parts[1]
+                    elif "Based on the provided information" in answer_text:
+                        parts = answer_text.split("Based on the provided information", 1)
+                        if len(parts) > 1:
+                            answer_text = "Based on the provided information" + parts[1]
                     
                     # 引用文献リストの強制カット
                     if "📚 引用文献" in answer_text:

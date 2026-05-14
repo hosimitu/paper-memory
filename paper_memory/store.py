@@ -556,11 +556,11 @@ class NoteStore:
     def _build_search_text(self, note: PaperNote) -> str:
         parts = [note.content]
         if note.keywords:
-            parts.append("キーワード: " + ", ".join(note.keywords))
+            parts.append("Keywords: " + ", ".join(note.keywords))
         if note.context:
-            parts.append("文脈: " + note.context)
+            parts.append("Context: " + note.context)
         if note.tags:
-            parts.append("タグ: " + ", ".join(note.tags))
+            parts.append("Tags: " + ", ".join(note.tags))
         return " ".join(parts)
 
     def _add_to_chroma(self, note: PaperNote) -> None:
