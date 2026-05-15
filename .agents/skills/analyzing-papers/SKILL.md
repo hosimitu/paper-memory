@@ -46,7 +46,8 @@ A skill for extracting knowledge elements from research paper PDFs and generatin
 
 ### Atomicity
 
-When extracting knowledge from a paper, you MUST divide it into the following element types:
+When extracting knowledge from a paper, you MUST classify each element into exactly one of the following `Type`s.
+**[CRITICAL] You MUST output the EXACT string listed in the `Type` column (e.g., "background"). Do NOT output the `Description` or any other variations. If you output an invalid string, it will be automatically forced to "other".**
 
 | Type | Description |
 |------|-------------|
