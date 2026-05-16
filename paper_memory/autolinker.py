@@ -17,8 +17,11 @@ import json
 import os
 import sys
 
+import warnings
 try:
-    import google.generativeai as genai
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=FutureWarning)
+        import google.generativeai as genai
 except ImportError:
     genai = None
 
@@ -71,41 +74,57 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
     from .prompts import get_autolink_prompt
     prompt = get_autolink_prompt(target_json, candidates_json)
 
+    import time
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json"
-            )
-        )
+        max_retries = 3
+        response = None
+        for attempt in range(max_retries):
+            try:
+                response = model.generate_content(
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        response_mime_type="application/json"
+                    )
+                )
+                break
+            except Exception as e:
+                if ("429" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
+                    wait_sec = 10 * (attempt + 1)
+                    print(f"⚠️ LLMリンク評価: レート制限発生。{wait_sec}秒待機してリトライします (試行 {attempt + 1}/{max_retries})...", file=sys.stderr)
+                    time.sleep(wait_sec)
+                    continue
+                raise e
         result_text = response.text.strip()
         
-        # Markdownのコードブロック記法が含まれている場合は除去
-        if result_text.startswith("```json"):
-            result_text = result_text[7:]
-        elif result_text.startswith("```"):
-            result_text = result_text[3:]
-        if result_text.endswith("```"):
-            result_text = result_text[:-3]
-        result_text = result_text.strip()
-
-        try:
-            # JSONとしてパース
-            results = json.loads(result_text)
-            if not isinstance(results, list):
-                results = [results]
-            return results
-        except json.JSONDecodeError as e:
-            # 配列ではなく連続したJSONオブジェクト（{} {}...）が返された場合の救済処理
-            import re
-            fixed_text = re.sub(r'\}\s*\{', '},{', result_text)
-            if not fixed_text.startswith('['):
-                fixed_text = '[' + fixed_text + ']'
+        # Robust JSON extraction
+        import json
+        decoder = json.JSONDecoder()
+        results = []
+        text = result_text.lstrip()
+        
+        while text:
             try:
-                results = json.loads(fixed_text)
-                return results
-            except json.JSONDecodeError:
-                raise e
+                obj, index = decoder.raw_decode(text)
+                if isinstance(obj, list):
+                    results.extend(obj)
+                else:
+                    results.append(obj)
+                text = text[index:].lstrip()
+            except json.JSONDecodeError as e:
+                # If we haven't parsed anything and it fails, try to find the first '[' or '{'
+                import re
+                match = re.search(r'[[{]', text)
+                if match and match.start() > 0:
+                    text = text[match.start():]
+                    continue
+                else:
+                    # If we already have some results, ignore the rest of the unparseable text
+                    if results:
+                        break
+                    print(f"⚠️ JSON Decode Error. Raw text:\n{result_text[:500]}...", file=sys.stderr)
+                    raise e
+                    
+        return results
     except Exception as e:
         print(f"⚠️ LLMリンク評価中にエラーが発生しました: {e}", file=sys.stderr)
         return []

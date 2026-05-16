@@ -110,7 +110,7 @@ Output MUST be ONLY a JSON array following the schema below (Do NOT include Mark
     "is_linked": true,
     "reason": {{
       "en": "Brief reason for the link in English (1-2 sentences)",
-      "{config.DEFAULT_LANGUAGE}": "Reason in {config.DEFAULT_LANGUAGE} (1-2 sentences)"
+      "{DEFAULT_LANGUAGE}": "Reason in {DEFAULT_LANGUAGE} (1-2 sentences)"
     }}
   }}
 ]
