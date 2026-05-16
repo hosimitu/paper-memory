@@ -130,9 +130,17 @@ class Database:
                 answer TEXT NOT NULL,
                 references_json TEXT,
                 threshold REAL,
-                timestamp TEXT NOT NULL
+                timestamp TEXT NOT NULL,
+                search_method TEXT DEFAULT 'vector'
             )
             """)
+
+            # 既存のテーブルにカラムがない場合は追加 (Migration)
+            cursor = conn.execute("PRAGMA table_info(qa_history)")
+            columns = [column['name'] for column in cursor.fetchall()]
+            if 'search_method' not in columns:
+                conn.execute("ALTER TABLE qa_history ADD COLUMN search_method TEXT DEFAULT 'vector'")
+
             conn.commit()
 
     def migrate_notes(self, notes_dir: Path, backup_dir: Path) -> int:

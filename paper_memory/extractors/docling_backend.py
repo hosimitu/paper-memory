@@ -196,13 +196,11 @@ class DoclingBackend(ExtractorBackend):
         try:
             from PIL import Image
             import google.generativeai as genai
-            from dotenv import load_dotenv
             import re
         except ImportError as e:
             print(f"  [LLM] ライブラリ不足: {e}", file=sys.stderr)
             return markdown
 
-        load_dotenv(override=True)
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             return markdown

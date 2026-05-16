@@ -92,6 +92,7 @@ New-Item .env -ItemType File
 `.env` に以下を記述してください:
 ```env
 GEMINI_API_KEY="あなたのAPIキー"
+PAPER_MEMORY_LANGUAGE="ja"  # デフォルト言語 (ja または en)
 ```
 
 ---

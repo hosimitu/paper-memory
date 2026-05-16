@@ -9,8 +9,16 @@
       "doi": "DOI (Only if explicitly stated in the text. Guessing or hallucinating is strictly prohibited. Leave empty if unknown. Do NOT search the web as it will be auto-completed by the API)",
       "journal": "Journal / Conference Name",
       "relevance": "high",
-      "reason": "Why this reference is critically important (in English)",
-      "keywords": ["related keyword (in English)"]
+      "reason": {
+        "en": "Why this reference is critically important (in English)",
+        "local": "Why this reference is critically important (in the language specified by PAPER_MEMORY_LANGUAGE)"
+      },
+      "keywords": [
+        {
+          "en": "related keyword (in English)",
+          "local": "related keyword (in the language specified by PAPER_MEMORY_LANGUAGE)"
+        }
+      ]
     }
   ]
 }

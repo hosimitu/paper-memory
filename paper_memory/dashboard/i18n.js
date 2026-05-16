@@ -49,6 +49,9 @@ const i18nDict = {
         "search.input_placeholder": "Search knowledge by meaning (e.g. membrane separation limits)...",
         "search.hint": "Press Enter to search",
         "search.threshold": "Relevance Threshold (lower is stricter):",
+        "search.method.label": "Search Method:",
+        "search.method.vector": "Vector Search",
+        "search.method.keyword": "Keyword Search",
 
         "qa.title": "AI Assistant (Q&A)",
         "qa.hint": "AI generates answers based on accumulated notes. Sources are clearly indicated.",
@@ -131,6 +134,9 @@ const i18nDict = {
         "search.input_placeholder": "知識を意味で検索（例：膜分離の性能限界）...",
         "search.hint": "Enterキーで検索を実行します",
         "search.threshold": "関連度の閾値 (低いほど厳密):",
+        "search.method.label": "検索手法:",
+        "search.method.vector": "ベクトル検索",
+        "search.method.keyword": "キーワード検索",
 
         "qa.title": "AIアシスタント（過去の知識への質問）",
         "qa.hint": "蓄積されたノートをもとにAIが回答を生成します。推測を排除し、情報源を明示します。",
@@ -222,5 +228,19 @@ window.i18n = {
     setLanguage, 
     applyTranslations, 
     currentLang: () => currentLang,
-    getTranslatedString
+    getTranslatedString,
+    loadConfig: async () => {
+        try {
+            const res = await fetch('/api/config');
+            if (res.ok) {
+                const config = await res.json();
+                if (config.language && !localStorage.getItem('language')) {
+                    currentLang = config.language;
+                    applyTranslations();
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load config:', e);
+        }
+    }
 };

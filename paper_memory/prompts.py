@@ -34,7 +34,9 @@ Original broken table:
 {table_md}
 """
 
-def get_qa_assistant_prompt(context_str: str, query_text: str, lang: str = "ja") -> str:
+from .config import DEFAULT_LANGUAGE
+
+def get_qa_assistant_prompt(context_str: str, query_text: str, lang: str = DEFAULT_LANGUAGE) -> str:
     """
     [使用箇所 / Location] paper_memory/server.py -> handle_api_post()
     [用途 / Purpose] ダッシュボードのQA機能で、ノートの内容をもとに回答する / Provide answers based on note contents for the dashboard's QA feature
@@ -108,7 +110,7 @@ Output MUST be ONLY a JSON array following the schema below (Do NOT include Mark
     "is_linked": true,
     "reason": {{
       "en": "Brief reason for the link in English (1-2 sentences)",
-      "ja": "関連する理由（日本語で、簡潔に1〜2文で）"
+      "{config.DEFAULT_LANGUAGE}": "Reason in {config.DEFAULT_LANGUAGE} (1-2 sentences)"
     }}
   }}
 ]
