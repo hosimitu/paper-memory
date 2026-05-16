@@ -97,7 +97,6 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
         result_text = response.text.strip()
         
         # Robust JSON extraction
-        import json
         decoder = json.JSONDecoder()
         results = []
         text = result_text.lstrip()

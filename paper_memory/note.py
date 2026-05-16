@@ -101,13 +101,37 @@ class PaperNote:
     @classmethod
     def from_dict(cls, data: dict) -> "PaperNote":
         """辞書からPaperNoteを生成"""
-        # SourcePaperのネスト処理
-        if "source_paper" in data and isinstance(data["source_paper"], dict):
-            data["source_paper"] = SourcePaper.from_dict(data["source_paper"])
+        # 互換性エイリアス: LLMが誤ったキー名を使った場合の吸収
+        data = dict(data)  # 元dictを変更しないようコピー
+
+        # `type` → `element_type` のフォールバック
+        if "element_type" not in data and "type" in data:
+            data["element_type"] = data.pop("type")
+        
+        # `title` → `content` のフォールバック (note内部のタイトルを本文として扱う)
+        if ("content" not in data or not data["content"]) and "title" in data:
+            # ただし、トップレベルの構造で source_paper.title と混同しないよう注意
+            # ここは単一ノートの辞書を処理している想定
+            data["content"] = data.pop("title")
+
+        # SourcePaperのネスト処理（文字列で渡された場合のデコードも含む）
+        if "source_paper" in data:
+            sp = data["source_paper"]
+            if isinstance(sp, str):
+                try:
+                    import json as _json
+                    sp = _json.loads(sp)
+                except Exception:
+                    sp = {"title": sp}
+            if isinstance(sp, dict):
+                data["source_paper"] = SourcePaper.from_dict(sp)
+            elif not isinstance(sp, SourcePaper):
+                # それ以外の型はデフォルトのSourcePaperに置き換え
+                data["source_paper"] = SourcePaper()
             
         # element_typeのバリデーションと正規化
         if "element_type" in data and isinstance(data["element_type"], str):
-            val = data["element_type"].lower()
+            val = data["element_type"].lower().strip()
             if val not in ELEMENT_TYPES:
                 val = "other"
             data["element_type"] = val
@@ -176,8 +200,13 @@ class PaperNote:
     def summary(self) -> str:
         """ノートの要約を返す（一覧表示用）"""
         source = self.source_paper.title or "不明な論文"
+        # content が dict（多言語形式）の場合は en または local を優先的に取得
+        if isinstance(self.content, dict):
+            content_str = str(self.content.get("en") or self.content.get("local") or next(iter(self.content.values()), ""))
+        else:
+            content_str = str(self.content)
         return (
-            f"[{self.element_type}] {self.content[:80]}..."
+            f"[{self.element_type}] {content_str[:80]}..."
             f"\n  元論文: {source}"
             f"\n  タグ: {', '.join(str(t.get('local', t.get('en', list(t.values())[0]))) if isinstance(t, dict) else str(t) for t in self.tags[:5])}"
             f"\n  リンク数: {len(self.links)}"

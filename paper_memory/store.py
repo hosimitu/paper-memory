@@ -105,6 +105,14 @@ class NoteStore:
 
     def _save_note(self, note: PaperNote) -> None:
         """PaperNote オブジェクトを DB に保存 (UPSERT)"""
+        # source_paper が SourcePaper オブジェクトでない場合の防衛処理
+        if not isinstance(note.source_paper, SourcePaper):
+            if isinstance(note.source_paper, dict):
+                note.source_paper = SourcePaper.from_dict(note.source_paper)
+            elif isinstance(note.source_paper, str):
+                note.source_paper = SourcePaper(title=note.source_paper)
+            else:
+                note.source_paper = SourcePaper()
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             sp = note.source_paper

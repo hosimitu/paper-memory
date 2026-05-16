@@ -65,6 +65,8 @@ When extracting knowledge from a paper, you MUST classify each element into exac
 ### Output Format
 
 When knowledge is extracted from a paper, it MUST be output according to the JSON structure defined in `references/note-schema.json`.
+**[CRITICAL] Do NOT output a simple array of notes.** You MUST output a single JSON object containing both the `"source_paper"` information and the `"notes"` array.
+**[CRITICAL BILINGUAL REQUIREMENT]** For fields defined as bilingual dictionaries in the schema (such as `content`, `context`, `keywords`, `reason`), you MUST output BOTH the `"en"` key (English text) AND the `"local"` key (the user's preferred language, e.g., Japanese). Do NOT output a single string, and do NOT omit either language.
 
 ### Quality Standards
 
@@ -136,6 +138,7 @@ If there is no applicable literature, you may skip this step (0 references is ac
 ### Output Format
 
 Output MUST follow the JSON structure defined in `references/reference-schema.json`.
+**[CRITICAL BILINGUAL REQUIREMENT]** For fields like `reason` and `keywords`, you MUST output BOTH the `"en"` key AND the `"local"` key.
 
 ### Registration Procedure
 
