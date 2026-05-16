@@ -227,7 +227,14 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
                     print(f"✅ DOIを取得しました: {doi}", file=sys.stderr)
         
         notes = [PaperNote.from_dict(d) for d in data]
-        added = store.add_batch(notes)
+        try:
+            added = store.add_batch(notes)
+        except Exception as e:
+            output_json({
+                "status": "error",
+                "message": f"インデックス登録中にエラーが発生しました: {str(e)}",
+            })
+            sys.exit(1)
         
         # 参考文献リストから自動削除
         cleaned_total = 0
@@ -277,7 +284,14 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
             for d in data["notes"]:
                 d["source_paper"] = source_paper
                 notes.append(PaperNote.from_dict(d))
-            added = store.add_batch(notes)
+            try:
+                added = store.add_batch(notes)
+            except Exception as e:
+                output_json({
+                    "status": "error",
+                    "message": f"インデックス登録中にエラーが発生しました: {str(e)}",
+                })
+                sys.exit(1)
             
             # 参考文献リストから自動削除（タイトルまたはDOI一致）
             if source_paper.get("title"):
@@ -301,7 +315,14 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
                     print(f"✅ DOIを取得しました: {doi}", file=sys.stderr)
 
             note = PaperNote.from_dict(data)
-            added = store.add(note)
+            try:
+                added = store.add(note)
+            except Exception as e:
+                output_json({
+                    "status": "error",
+                    "message": f"インデックス登録中にエラーが発生しました: {str(e)}",
+                })
+                sys.exit(1)
             
             # 参考文献リストから自動削除
             if sp and sp.get("title"):
@@ -608,11 +629,18 @@ def cmd_cleanup(args, store: NoteStore) -> None:
 
 def cmd_reindex(args, store: NoteStore) -> None:
     """リインデックスコマンド"""
-    count = store.reindex()
-    output_json({
-        "status": "success",
-        "message": f"{count}件のノートを再インデックスしました",
-    })
+    try:
+        count = store.reindex()
+        output_json({
+            "status": "success",
+            "message": f"{count}件のノートを再インデックスしました",
+        })
+    except Exception as e:
+        output_json({
+            "status": "error",
+            "message": f"再インデックス中にエラーが発生しました: {str(e)}",
+        })
+        sys.exit(1)
 
 
 def cmd_migrate(args, store: NoteStore, ref_store: ReferenceStore) -> None:

@@ -10,7 +10,7 @@
   "notes": [
     {
       "content": "Text of the knowledge element (Summarized in English. MUST include important numerical values and specific methods)",
-      "element_type": "method",
+      "element_type": "MUST be EXACTLY one of: background, method, result, discussion, conclusion, insight, limitation, future_work, definition, other",
       "keywords": ["keyword 1 (in English)", "keyword 2", "keyword 3"],
       "context": "Explanation of the context in which this knowledge element is important (in English)",
       "tags": ["tag 1", "tag 2"]

@@ -22,9 +22,11 @@
 import json
 import os
 import sys
+import time
+import re
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from .note import PaperNote, SourcePaper
 from .database import Database
@@ -175,7 +177,11 @@ class NoteStore:
     def add(self, note: PaperNote) -> PaperNote:
         """ノートを追加・保存"""
         self._save_note(note)
-        self._add_to_chroma(note)
+        try:
+            self._add_to_chroma(note)
+        except Exception as e:
+            # SQLite には保存されているがインデックスに失敗したことを明示
+            raise RuntimeError(f"Note saved to DB, but indexing failed: {e}")
         return note
 
     def add_batch(self, notes: list[PaperNote]) -> list[PaperNote]:
@@ -196,10 +202,14 @@ class NoteStore:
             
         collection = self._get_chroma_collection()
         if collection:
-            try:
-                collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
-            except Exception as e:
-                print(f"⚠️ ChromaDBバッチ追加エラー: {e}", file=sys.stderr)
+            self._upsert_with_retry(
+                collection,
+                ids=ids,
+                documents=documents,
+                metadatas=metadatas
+            )
+        else:
+            raise RuntimeError("ChromaDB collection is not available for indexing.")
                 
         return notes
 
@@ -411,6 +421,11 @@ class NoteStore:
                         "distance": distance,
                     })
         
+        # 0件だった場合のフォールバック（ベクトル検索は成功したが結果がない、または閾値で消えた場合）
+        if not output:
+            print(f"ℹ️ セマンティック検索でヒットしなかったため、キーワード検索に切り替えます: {query}", file=sys.stderr)
+            return self._keyword_search(query, n_results)
+
         return output
 
 
@@ -471,14 +486,13 @@ class NoteStore:
         """既存の全ノートからChromaDBインデックスを再構築する"""
         collection = self._get_chroma_collection()
         if collection is None:
-            return 0
+            raise RuntimeError("ChromaDB collection is not available.")
         
-        import time
         notes_list = self.list_all()
         total = len(notes_list)
         count = 0
         
-        print(f"🔄 {total}件のノートを再インデックスします（バッチサイズ: {batch_size}）...")
+        print(f"🔄 {total}件のノートを再インデックスします（バッチサイズ: {batch_size}）...", file=sys.stderr)
         
         for i in range(0, total, batch_size):
             batch = notes_list[i:i + batch_size]
@@ -492,19 +506,22 @@ class NoteStore:
             } for n in batch]
             
             try:
-                collection.upsert(
+                self._upsert_with_retry(
+                    collection,
                     ids=ids,
                     documents=documents,
                     metadatas=metadatas
                 )
                 count += len(batch)
-                print(f"✅ {count}/{total} 件完了...")
+                print(f"✅ {count}/{total} 件完了...", file=sys.stderr)
                 
                 if i + batch_size < total:
-                    time.sleep(20) 
+                    # レート制限を考慮して少し待機
+                    time.sleep(2) 
             except Exception as e:
-                print(f"⚠️ バッチ処理中にエラーが発生しました（インデックス {i}）: {e}", file=sys.stderr)
-                time.sleep(30)
+                print(f"❌ バッチ処理中に致命的なエラーが発生しました（インデックス {i}）: {e}", file=sys.stderr)
+                # 再インデックス時は一部失敗しても続行せず、問題を報告する
+                raise e
                 
         return count
 
@@ -566,20 +583,43 @@ class NoteStore:
     def _add_to_chroma(self, note: PaperNote) -> None:
         collection = self._get_chroma_collection()
         if collection is None:
-            return
-        try:
-            search_text = self._build_search_text(note)
-            collection.upsert(
-                ids=[note.id],
-                documents=[search_text],
-                metadatas=[{
-                    "element_type": note.element_type,
-                    "paper_title": note.source_paper.title,
-                    "timestamp": note.timestamp,
-                }],
-            )
-        except Exception as e:
-            print(f"⚠️ ChromaDB追加エラー: {e}", file=sys.stderr)
+            raise RuntimeError("ChromaDB is not initialized.")
+        
+        search_text = self._build_search_text(note)
+        self._upsert_with_retry(
+            collection,
+            ids=[note.id],
+            documents=[search_text],
+            metadatas=[{
+                "element_type": note.element_type,
+                "paper_title": note.source_paper.title,
+                "timestamp": note.timestamp,
+            }],
+        )
+
+    def _upsert_with_retry(self, collection, ids, documents, metadatas, max_retries=3):
+        """リトライ機能付きの upsert"""
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                collection.upsert(
+                    ids=ids,
+                    documents=documents,
+                    metadatas=metadatas
+                )
+                return
+            except Exception as e:
+                last_exception = e
+                # 429 (Rate Limit) の場合は待機してリトライ
+                if "429" in str(e) or "quota" in str(e).lower():
+                    wait_time = (attempt + 1) * 10
+                    print(f"⚠️ レート制限に達しました。{wait_time}秒後にリトライします ({attempt + 1}/{max_retries})...", file=sys.stderr)
+                    time.sleep(wait_time)
+                else:
+                    # その他のエラーは即時レイズ
+                    raise e
+        
+        raise last_exception
 
     def _update_chroma(self, note: PaperNote) -> None:
         self._add_to_chroma(note)
