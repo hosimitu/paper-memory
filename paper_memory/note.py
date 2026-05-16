@@ -24,7 +24,7 @@ import uuid
 import json
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 
 # 論文要素タイプの定義
@@ -69,13 +69,13 @@ class PaperNote:
     """
     # コアデータ
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    content: str = ""                          # 知識要素のテキスト
+    content: Union[str, dict] = ""             # 知識要素のテキスト（多言語対応可）
     source_paper: SourcePaper = field(default_factory=SourcePaper)
     element_type: str = "other"                # 要素タイプ（ELEMENT_TYPES参照）
 
     # LLM生成メタデータ（Gemini CLIが生成）
     keywords: list[str] = field(default_factory=list)
-    context: str = ""                          # この要素の文脈記述
+    context: Union[str, dict] = ""             # この要素の文脈記述（多言語対応可）
     tags: list[str] = field(default_factory=list)
 
     # リンキング（Zettelkastenの原則）
@@ -156,7 +156,7 @@ class PaperNote:
                 "timestamp": datetime.now().isoformat(),
             })
 
-    def update_context(self, new_context: str, reason: str = "") -> None:
+    def update_context(self, new_context: Union[str, dict], reason: str = "") -> None:
         """コンテキストを更新（A-Memの進化原則）"""
         old_context = self.context
         self.context = new_context

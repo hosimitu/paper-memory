@@ -14,14 +14,17 @@
 
 # -*- coding: utf-8 -*-
 """
-Paper Memory — 論文要素蓄積システム
-
-A-Memの設計思想（Zettelkasten原則：原子性・リンキング・進化）に基づき、
-研究論文PDFから知識要素を抽出・蓄積・組織化するPythonヘルパーパッケージ。
-Gemini CLIのバックエンドとして動作する。
+Config — プロジェクト設定の一元管理
 """
 
-__version__ = "0.2.0"
+import os
+from dotenv import load_dotenv
 
-from .reference import Reference, ReferenceStore  # noqa: F401
-from .config import DEFAULT_LANGUAGE  # noqa: F401
+# .env の読み込み
+load_dotenv(override=True)
+
+# デフォルト言語設定 ('en' or 'ja')
+DEFAULT_LANGUAGE = os.environ.get("PAPER_MEMORY_LANGUAGE", "ja")
+
+# AIモデル設定（ai_models.py から継承または統合も検討可能だが、一旦インポートしておく）
+from .ai_models import QA_MODEL, EMBEDDING_MODEL, TABLE_IMAGE_MODEL, FORMULA_IMAGE_MODEL, AUTOLINK_MODEL

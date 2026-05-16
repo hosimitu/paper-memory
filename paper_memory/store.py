@@ -59,6 +59,16 @@ class NoteStore:
     # DB <-> Object マッピング
     # ========================================
 
+    def _parse_maybe_json(self, val):
+        if not val:
+            return ""
+        try:
+            if isinstance(val, str) and val.strip().startswith(('{', '[')):
+                return json.loads(val)
+        except:
+            pass
+        return val
+
     def _row_to_note(self, row) -> PaperNote:
         """DB の Row を PaperNote オブジェクトに変換"""
         sp = SourcePaper(
@@ -79,11 +89,11 @@ class NoteStore:
             
         note = PaperNote(
             id=row["id"],
-            content=row["content"],
+            content=self._parse_maybe_json(row["content"]),
             source_paper=sp,
             element_type=row["element_type"],
             keywords=json.loads(row["keywords"]) if row["keywords"] else [],
-            context=row["context"] or "",
+            context=self._parse_maybe_json(row["context"]),
             tags=json.loads(row["tags"]) if row["tags"] else [],
             links=links,
             timestamp=row["timestamp"],
@@ -121,6 +131,9 @@ class NoteStore:
             cur.execute("SELECT id FROM papers WHERE title = ?", (title,))
             paper_id = cur.fetchone()["id"]
             
+            save_content = json.dumps(note.content, ensure_ascii=False) if not isinstance(note.content, str) else note.content
+            save_context = json.dumps(note.context, ensure_ascii=False) if not isinstance(note.context, str) else note.context
+            
             cur.execute("""
             INSERT INTO notes (id, content, paper_id, element_type, keywords, context, tags, timestamp, last_accessed, retrieval_count, evolution_history)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -137,11 +150,11 @@ class NoteStore:
                 evolution_history=excluded.evolution_history
             """, (
                 note.id,
-                note.content,
+                save_content,
                 paper_id,
                 note.element_type,
                 json.dumps(note.keywords, ensure_ascii=False),
-                note.context,
+                save_context,
                 json.dumps(note.tags, ensure_ascii=False),
                 note.timestamp,
                 note.last_accessed,
@@ -324,19 +337,20 @@ class NoteStore:
     # QA履歴管理
     # ========================================
 
-    def add_qa_history(self, query: str, answer: str, references: list, threshold: float) -> None:
+    def add_qa_history(self, query: str, answer: str, references: list, threshold: float, search_method: str = "vector") -> None:
         """QAのやり取りを履歴に保存し、10件を超えたら古いものを削除する"""
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-            INSERT INTO qa_history (query, answer, references_json, threshold, timestamp)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO qa_history (query, answer, references_json, threshold, timestamp, search_method)
+            VALUES (?, ?, ?, ?, ?, ?)
             """, (
                 query,
                 answer,
                 json.dumps(references, ensure_ascii=False),
                 threshold,
-                datetime.now().isoformat()
+                datetime.now().isoformat(),
+                search_method
             ))
             
             conn.commit()
@@ -356,7 +370,8 @@ class NoteStore:
                     "answer": row["answer"],
                     "references": json.loads(row["references_json"]) if row["references_json"] else [],
                     "threshold": row["threshold"],
-                    "timestamp": row["timestamp"]
+                    "timestamp": row["timestamp"],
+                    "search_method": row["search_method"] if "search_method" in row.keys() else "vector"
                 })
             return history
 
@@ -377,7 +392,7 @@ class NoteStore:
     # セマンティック検索（ChromaDB）
     # ========================================
 
-    def search(self, query: str, n_results: int = 10, element_type_filter: Optional[str] = None, distance_threshold: Optional[float] = None) -> list[dict]:
+    def search(self, query: str, n_results: int = 10, element_type_filter: Optional[str] = None, distance_threshold: Optional[float] = None) -> dict:
         """
         セマンティック検索
         
@@ -386,10 +401,13 @@ class NoteStore:
             n_results: 最大取得件数（デフォルト: 10）
             element_type_filter: 要素タイプによるフィルタ
             distance_threshold: 距離の閾値（指定された場合、閾値以下のものを最大 n_results 件返します）
+        
+        Returns:
+            dict: {"results": list[dict], "method": "vector" | "keyword"}
         """
         collection = self._get_chroma_collection()
         if collection is None:
-            return self._keyword_search(query, n_results)
+            return {"results": self._keyword_search(query, n_results), "method": "keyword"}
 
         try:
             query_params = {
@@ -402,7 +420,7 @@ class NoteStore:
             results = collection.query(**query_params)
         except Exception as e:
             print(f"⚠️ ChromaDB検索エラー: {e}", file=sys.stderr)
-            return self._keyword_search(query, n_results)
+            return {"results": self._keyword_search(query, n_results), "method": "keyword"}
 
         output = []
         if results and results["ids"] and results["ids"][0]:
@@ -424,9 +442,9 @@ class NoteStore:
         # 0件だった場合のフォールバック（ベクトル検索は成功したが結果がない、または閾値で消えた場合）
         if not output:
             print(f"ℹ️ セマンティック検索でヒットしなかったため、キーワード検索に切り替えます: {query}", file=sys.stderr)
-            return self._keyword_search(query, n_results)
+            return {"results": self._keyword_search(query, n_results), "method": "keyword"}
 
-        return output
+        return {"results": output, "method": "vector"}
 
 
     def find_neighbors(self, note_id: str, n_results: int = 10, element_type_filter: Optional[str] = None) -> list[dict]:
@@ -435,7 +453,8 @@ class NoteStore:
         if not note:
             return []
         search_text = self._build_search_text(note)
-        results = self.search(search_text, n_results + 1, element_type_filter=element_type_filter)
+        search_data = self.search(search_text, n_results + 1, element_type_filter=element_type_filter)
+        results = search_data["results"]
         return [r for r in results if r["note"]["id"] != note_id][:n_results]
 
     # ========================================
@@ -538,8 +557,7 @@ class NoteStore:
             import chromadb.utils.embedding_functions as embedding_functions
             
             try:
-                from dotenv import load_dotenv
-                load_dotenv(override=True)
+                pass
             except ImportError:
                 pass
 
@@ -571,11 +589,20 @@ class NoteStore:
             return None
 
     def _build_search_text(self, note: PaperNote) -> str:
-        parts = [note.content]
+        parts = []
+        if isinstance(note.content, dict):
+            parts.extend(str(v) for v in note.content.values() if v)
+        elif note.content:
+            parts.append(str(note.content))
+            
         if note.keywords:
             parts.append("Keywords: " + ", ".join(note.keywords))
-        if note.context:
-            parts.append("Context: " + note.context)
+            
+        if isinstance(note.context, dict):
+            parts.extend("Context: " + str(v) for v in note.context.values() if v)
+        elif note.context:
+            parts.append("Context: " + str(note.context))
+            
         if note.tags:
             parts.append("Tags: " + ", ".join(note.tags))
         return " ".join(parts)

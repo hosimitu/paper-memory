@@ -19,7 +19,6 @@ import sys
 
 try:
     import google.generativeai as genai
-    from dotenv import load_dotenv
 except ImportError:
     genai = None
 
@@ -43,8 +42,7 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
         print("⚠️ google-generativeai がインストールされていません。", file=sys.stderr)
         return []
 
-    # 環境変数の読み込み (.env)
-    load_dotenv(override=True)
+    # 環境変数の読み込み (config.py経由でロード済み)
     
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:

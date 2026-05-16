@@ -42,7 +42,28 @@ class App {
         this.init();
     }
 
-    init() {
+    getMethodBadgeHtml(method) {
+        if (method === 'vector') {
+            return `
+                <span class="method-badge vector" title="${i18n.t('search.method.vector')}">
+                    <i data-lucide="sparkles"></i>
+                    ${i18n.t('search.method.vector')}
+                </span>
+            `;
+        } else {
+            return `
+                <span class="method-badge keyword" title="${i18n.t('search.method.keyword')}">
+                    <i data-lucide="type"></i>
+                    ${i18n.t('search.method.keyword')}
+                </span>
+            `;
+        }
+    }
+
+    async init() {
+        // Load server config first
+        await i18n.loadConfig();
+
         // Navigation setup
         this.navItems.forEach(item => {
             item.addEventListener('click', (e) => {
@@ -196,7 +217,7 @@ class App {
                 item.style.setProperty('--type-color', TYPE_COLORS[note.element_type] || '#ccc');
                 item.innerHTML = `
                     <div class="note-header"><span class="note-type">${typeLabels[note.element_type] || note.element_type}</span></div>
-                    <div class="note-content">${note.content}</div>
+                    <div class="note-content">${i18n.getTranslatedString(note.content)}</div>
                 `;
                 item.onclick = () => this.showNoteDetail(note.id);
                 recentArea.appendChild(item);
@@ -282,7 +303,7 @@ class App {
                         <span class="note-type">${typeLabels[note.element_type] || note.element_type}</span>
                         <span class="note-date">${new Date(note.timestamp).toLocaleDateString()}</span>
                     </div>
-                    <div class="note-content">${note.content}</div>
+                    <div class="note-content">${i18n.getTranslatedString(note.content)}</div>
                     <div class="note-footer">
                         <i data-lucide="book" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:4px"></i>
                         ${note.source_paper.title}
@@ -300,11 +321,12 @@ class App {
         const searchInput = searchContainer.querySelector('.search-filter-input');
         searchInput.addEventListener('input', (e) => {
             const q = e.target.value.toLowerCase();
-            const filtered = notes.filter(n =>
-                n.content.toLowerCase().includes(q) ||
-                n.source_paper.title.toLowerCase().includes(q) ||
-                (n.keywords && n.keywords.some(k => k.toLowerCase().includes(q)))
-            );
+            const filtered = notes.filter(n => {
+                const c = i18n.getTranslatedString(n.content).toLowerCase();
+                const t = n.source_paper.title.toLowerCase();
+                const kwMatch = n.keywords && n.keywords.some(k => i18n.getTranslatedString(k).toLowerCase().includes(q));
+                return c.includes(q) || t.includes(q) || kwMatch;
+            });
             renderList(filtered);
         });
     }
@@ -330,22 +352,23 @@ class App {
             doiArea.innerHTML = '';
         }
 
-        document.getElementById('modal-content-full').innerText = note.content;
+        document.getElementById('modal-content-full').innerText = i18n.getTranslatedString(note.content);
 
         const kwArea = document.getElementById('modal-keywords');
         kwArea.innerHTML = '';
         (note.keywords || []).forEach(kw => {
+            const kwStr = i18n.getTranslatedString(kw);
             const span = document.createElement('span');
             span.className = 'keyword-tag clickable';
-            span.innerText = kw;
+            span.innerText = kwStr;
             span.onclick = () => {
                 this.noteModal.classList.remove('active');
-                this.switchView('search', { query: kw });
+                this.switchView('search', { query: kwStr });
             };
             kwArea.appendChild(span);
         });
 
-        document.getElementById('modal-context').innerText = note.context || '-';
+        document.getElementById('modal-context').innerText = i18n.getTranslatedString(note.context) || '-';
 
         const linksArea = document.getElementById('modal-links');
         linksArea.innerHTML = '';
@@ -361,7 +384,7 @@ class App {
 
                 card.innerHTML = `
                     <div class="note-header"><span class="note-type">${typeLabels[link.element_type] || link.element_type}</span></div>
-                    <div class="note-content">${link.content}</div>
+                    <div class="note-content">${i18n.getTranslatedString(link.content)}</div>
                     ${reasonHtml}
                 `;
                 card.onclick = (e) => {
@@ -452,12 +475,13 @@ class App {
         let keywords = [];
         try { keywords = JSON.parse(ref.keywords || '[]'); } catch (e) { }
         keywords.forEach(kw => {
+            const kwStr = i18n.getTranslatedString(kw);
             const span = document.createElement('span');
             span.className = 'keyword-tag clickable';
-            span.innerText = kw;
+            span.innerText = kwStr;
             span.onclick = () => {
                 this.noteModal.classList.remove('active');
-                this.switchView('search', { query: kw });
+                this.switchView('search', { query: kwStr });
             };
             kwArea.appendChild(span);
         });
@@ -701,8 +725,13 @@ class App {
                         </button>
                     </div>
                     <div class="qa-history-answer">${item.answer}</div>
-                    <div class="qa-history-meta">
-                        ${date} | ${i18n.t('search.threshold').split('(')[0].trim()}: ${item.threshold} | ${item.references.length}${currentLang === 'ja' ? '件' : ''} of references
+                    <div class="qa-history-meta" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <span>${date}</span>
+                        <span>|</span>
+                        <span>${i18n.t('search.threshold').split('(')[0].trim()}: ${item.threshold}</span>
+                        <span>|</span>
+                        <span>${item.references.length}${i18n.currentLang() === 'ja' ? '件' : ''} of references</span>
+                        ${this.getMethodBadgeHtml(item.search_method)}
                     </div>
                 `;
 
@@ -718,7 +747,7 @@ class App {
                 div.onclick = () => {
                     // 履歴をクリックしたら結果エリアに再表示
                     const resultsArea = document.getElementById('qa-results');
-                    this.displayQAResult(item.query, item.answer, item.references, resultsArea);
+                    this.displayQAResult(item.query, item.answer, item.references, resultsArea, item.search_method);
                     document.getElementById('qa-input').value = item.query;
                     document.getElementById('qa-threshold-slider').value = item.threshold;
                     document.getElementById('qa-threshold-display').innerText = item.threshold;
@@ -756,9 +785,11 @@ class App {
         };
 
         resultsArea.innerHTML = `
-            <div class="qa-result-card" style="background: var(--bg-primary); border: 1px solid var(--accent); border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(56, 189, 248, 0.1);">
-                <div style="font-weight: 700; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                    <i data-lucide="help-circle"></i> ${i18n.t('qa.result.query')}: ${query}
+                <div style="font-weight: 700; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i data-lucide="help-circle"></i> ${i18n.t('qa.result.query')}: ${query}
+                    </div>
+                    ${this.getMethodBadgeHtml(arguments[4] || 'vector')}
                 </div>
                 <div class="modal-text-block markdown-content" style="font-size: 1.05rem; line-height: 1.8; color: var(--text-primary); margin-bottom: 24px;">
                     ${marked.parse(dedentedAnswer(answer))}
@@ -816,7 +847,7 @@ class App {
             }
 
             if (data.answer) {
-                this.displayQAResult(query, data.answer, data.references || [], resultsArea);
+                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method);
                 this.loadQAHistory(); // 履歴を更新
             } else {
                 resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: 'No answer returned' })}</div>`;
@@ -848,7 +879,13 @@ class App {
             }
 
             if (metaArea) {
-                metaArea.innerText = `${results.length} ${currentLang === 'ja' ? '件の関連ノートが見つかりました' : 'notes found'} (${i18n.t('search.threshold').split('(')[0].trim()}: ${threshold})`;
+                const countText = `${results.length} ${i18n.currentLang() === 'ja' ? '件の関連ノートが見つかりました' : 'notes found'}`;
+                metaArea.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span>${countText} (${i18n.t('search.threshold').split('(')[0].trim()}: ${threshold})</span>
+                        ${this.getMethodBadgeHtml(data.search_method)}
+                    </div>
+                `;
             }
 
             // 要素タイプ順にソート（元々のロジックを維持）
@@ -873,7 +910,7 @@ class App {
                         <span class="note-type">${typeLabels[note.element_type] || note.element_type}</span>
                         ${score !== null ? `<span class="score-badge">${currentLang === 'ja' ? '適合度' : 'Match'}: ${score}%</span>` : ''}
                     </div>
-                    <div class="note-content">${note.content}</div>
+                    <div class="note-content">${i18n.getTranslatedString(note.content)}</div>
                     <div class="note-footer">${note.source_paper.title}</div>
                 `;
                 card.onclick = () => this.showNoteDetail(note.id);

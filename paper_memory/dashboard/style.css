@@ -1088,3 +1088,31 @@ body {
     background: #fef2f2;
     transform: translateY(-2px);
 }
+
+/* Method Badges */
+.method-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.method-badge i {
+    width: 12px;
+    height: 12px;
+}
+
+.method-badge.vector {
+    background: rgba(99, 102, 241, 0.1);
+    color: #6366f1;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.method-badge.keyword {
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--text-secondary);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}

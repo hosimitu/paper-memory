@@ -27,6 +27,7 @@ from pathlib import Path
 from .store import NoteStore
 from .reference import ReferenceStore
 from .ai_models import QA_MODEL
+from .config import DEFAULT_LANGUAGE
 import datetime
 
 # レート制限管理 (RPM)
@@ -141,9 +142,10 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 
                 # 閾値が指定されている場合は n_results を大きめにする
                 n = int(query.get("n", [10])[0])
-                search_results = store.search(q, n_results=n, distance_threshold=threshold)
+                search_data = store.search(q, n_results=n, distance_threshold=threshold)
                 data = {
-                    "results": search_results,
+                    "results": search_data["results"],
+                    "search_method": search_data["method"],
                     "query": q,
                     "threshold": threshold,
                     "n": n
@@ -160,6 +162,10 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         "used": update_api_usage(),
                         "limit": API_LIMIT_RPM
                     }
+                }
+            elif path == "/api/config":
+                data = {
+                    "language": DEFAULT_LANGUAGE
                 }
             else:
                 status = 404
@@ -250,7 +256,9 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     # 1. 検索実行（閾値ベースで関連性の高いもののみ抽出）
                     threshold = post_data.get("threshold", 0.45)
                     n_results = post_data.get("n", 15)
-                    search_results = store.search(query_text, n_results=n_results, distance_threshold=threshold)
+                    search_data = store.search(query_text, n_results=n_results, distance_threshold=threshold)
+                    search_results = search_data["results"]
+                    search_method = search_data["method"]
                     
                     if not search_results:
                         # 関連ノートが見つからない場合は、AIへのプロンプト送信を中断してユーザーに通知する
@@ -282,14 +290,12 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     context_str = "\n".join(context_lines)
                     
                     from .prompts import get_qa_assistant_prompt
-                    lang = post_data.get("lang", "en")
+                    lang = post_data.get("lang", DEFAULT_LANGUAGE)
                     prompt = get_qa_assistant_prompt(context_str, query_text, lang)
 
                     
                     # 3. LLM呼び出し
                     import google.generativeai as genai
-                    from dotenv import load_dotenv
-                    load_dotenv(override=True)
                     api_key = os.environ.get("GEMINI_API_KEY")
                     if not api_key:
                         raise ValueError("GEMINI_API_KEY is not set.")
@@ -329,6 +335,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     data = {
                         "answer": answer_text,
                         "references": references,
+                        "search_method": search_method,
                         "api_usage": {
                             "used": update_api_usage(),
                             "limit": API_LIMIT_RPM
@@ -336,7 +343,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     }
                     
                     # 履歴に保存
-                    store.add_qa_history(query_text, answer_text, references, threshold)
+                    store.add_qa_history(query_text, answer_text, references, threshold, search_method=search_method)
 
             elif path.startswith("/api/references/") and path.endswith("/status"):
                 parts = path.strip("/").split("/")

@@ -76,6 +76,7 @@ New-Item .env -ItemType File
 Add the following to `.env`:
 ```env
 GEMINI_API_KEY="your_api_key_here"
+PAPER_MEMORY_LANGUAGE="en"  # Default language (en or ja)
 ```
 *(You can obtain an API key for free from [Google AI Studio](https://aistudio.google.com/app/apikey))*
 
