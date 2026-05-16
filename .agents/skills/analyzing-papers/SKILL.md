@@ -38,7 +38,8 @@ A skill for extracting knowledge elements from research paper PDFs and generatin
 3. **Phased Note Generation**: It is recommended to generate notes for a single paper over 3 turns:
    - Turn 1: `method`, `background`, `definition`
    - Turn 2: `result`, `discussion`
-   - Turn 3: `conclusion`, `limitation`, `future_work`, `insight`
+   - Turn 3: `conclusion`, `limitation`, `future_work`, `insight` AND **Reference Extraction (Reading List)**
+     - *Note: In Turn 3, in addition to generating notes, you MUST identify key references based on the "Reference Extraction Rules" below and register them using `refs-add`.*
 
 ---
 
@@ -151,5 +152,5 @@ Output MUST follow the JSON structure defined in `references/reference-schema.js
 
 ## Reporting to the User
 
-- Summarize the analysis results and report the number of added notes and link candidates in the **user's preferred language** (usually Japanese).
+- Summarize the analysis results and report the number of added notes, **added references (Reading List)**, and link candidates in the **user's preferred language** (usually Japanese).
 - (**Do NOT include the generated JSON itself in the chat response** to save tokens).
