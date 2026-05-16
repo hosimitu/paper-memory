@@ -217,7 +217,13 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
     
     if isinstance(data, list):
         # 個別のノートリストの場合（通常はsource_paperが含まれるはずだが）
+        notes = []
         for d in data:
+            if "source_paper" not in d:
+                # source_paperが欠落している場合のデフォルト
+                # ここでは Unknown Paper になるが、警告を出す
+                print("⚠️ 警告: ノートに source_paper 情報が含まれていません。'Unknown Paper' として登録されます。", file=sys.stderr)
+            
             sp = d.get("source_paper", {})
             if isinstance(sp, dict) and sp.get("title") and not sp.get("doi"):
                 print(f"🔍 メイン論文のDOIを検索中: {sp['title']}", file=sys.stderr)
@@ -225,8 +231,9 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
                 if doi:
                     sp["doi"] = doi
                     print(f"✅ DOIを取得しました: {doi}", file=sys.stderr)
+            
+            notes.append(PaperNote.from_dict(d))
         
-        notes = [PaperNote.from_dict(d) for d in data]
         try:
             added = store.add_batch(notes)
         except Exception as e:
