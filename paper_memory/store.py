@@ -193,8 +193,8 @@ class NoteStore:
         try:
             self._add_to_chroma(note)
         except Exception as e:
-            # SQLite には保存されているがインデックスに失敗したことを明示
-            raise RuntimeError(f"Note saved to DB, but indexing failed: {e}")
+            # SQLite には保存されているがインデックスに失敗したことを警告
+            print(f"⚠️ Note saved to DB, but indexing failed: {e}", file=sys.stderr)
         return note
 
     def add_batch(self, notes: list[PaperNote]) -> list[PaperNote]:
@@ -215,14 +215,17 @@ class NoteStore:
             
         collection = self._get_chroma_collection()
         if collection:
-            self._upsert_with_retry(
-                collection,
-                ids=ids,
-                documents=documents,
-                metadatas=metadatas
-            )
+            try:
+                self._upsert_with_retry(
+                    collection,
+                    ids=ids,
+                    documents=documents,
+                    metadatas=metadatas
+                )
+            except Exception as e:
+                print(f"⚠️ Batch saved to DB, but indexing failed: {e}", file=sys.stderr)
         else:
-            raise RuntimeError("ChromaDB collection is not available for indexing.")
+            print("⚠️ ChromaDB collection is not available for indexing. Vector search will be disabled.", file=sys.stderr)
                 
         return notes
 
@@ -563,10 +566,42 @@ class NoteStore:
 
             db_path = str(self.base_dir / ".chromadb")
             self._chroma_client = chromadb.PersistentClient(path=db_path)
+            class GeminiEmbeddingFunction(embedding_functions.EmbeddingFunction):
+                def __init__(self, api_key: str, model_name: str):
+                    self.api_key = api_key
+                    self.model_name = model_name if model_name.startswith('models/') else f'models/{model_name}'
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=FutureWarning)
+                        import google.generativeai as genai
+                        genai.configure(api_key=self.api_key)
+                def __call__(self, input: chromadb.Documents) -> chromadb.Embeddings:
+                    import google.generativeai as genai
+                    import warnings
+                    import time
+                    import sys
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            with warnings.catch_warnings():
+                                warnings.simplefilter("ignore", category=FutureWarning)
+                                result = genai.embed_content(
+                                    model=self.model_name,
+                                    content=input,
+                                    task_type="RETRIEVAL_DOCUMENT"
+                                )
+                            return result['embedding']
+                        except Exception as e:
+                            if ("429" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
+                                wait_time = (attempt + 1) * 10
+                                print(f"⚠️ Embedding: レート制限に達しました。{wait_time}秒後にリトライします ({attempt + 1}/{max_retries})...", file=sys.stderr)
+                                time.sleep(wait_time)
+                                continue
+                            raise e
             
             api_key = os.environ.get("GEMINI_API_KEY")
             if api_key:
-                gemini_ef = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
+                gemini_ef = GeminiEmbeddingFunction(
                     api_key=api_key,
                     model_name=EMBEDDING_MODEL
                 )
@@ -596,7 +631,13 @@ class NoteStore:
             parts.append(str(note.content))
             
         if note.keywords:
-            parts.append("Keywords: " + ", ".join(note.keywords))
+            keyword_list = []
+            for kw in note.keywords:
+                if isinstance(kw, dict):
+                    keyword_list.extend(str(v) for v in kw.values() if v)
+                else:
+                    keyword_list.append(str(kw))
+            parts.append("Keywords: " + ", ".join(keyword_list))
             
         if isinstance(note.context, dict):
             parts.extend("Context: " + str(v) for v in note.context.values() if v)
@@ -604,7 +645,13 @@ class NoteStore:
             parts.append("Context: " + str(note.context))
             
         if note.tags:
-            parts.append("Tags: " + ", ".join(note.tags))
+            tag_list = []
+            for tag in note.tags:
+                if isinstance(tag, dict):
+                    tag_list.extend(str(v) for v in tag.values() if v)
+                else:
+                    tag_list.append(str(tag))
+            parts.append("Tags: " + ", ".join(tag_list))
         return " ".join(parts)
 
     def _add_to_chroma(self, note: PaperNote) -> None:

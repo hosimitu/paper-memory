@@ -179,6 +179,6 @@ class PaperNote:
         return (
             f"[{self.element_type}] {self.content[:80]}..."
             f"\n  元論文: {source}"
-            f"\n  タグ: {', '.join(self.tags[:5])}"
+            f"\n  タグ: {', '.join(str(t.get('local', t.get('en', list(t.values())[0]))) if isinstance(t, dict) else str(t) for t in self.tags[:5])}"
             f"\n  リンク数: {len(self.links)}"
         )

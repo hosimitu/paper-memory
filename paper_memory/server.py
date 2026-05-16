@@ -295,7 +295,10 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
 
                     
                     # 3. LLM呼び出し
-                    import google.generativeai as genai
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=FutureWarning)
+                        import google.generativeai as genai
                     api_key = os.environ.get("GEMINI_API_KEY")
                     if not api_key:
                         raise ValueError("GEMINI_API_KEY is not set.")

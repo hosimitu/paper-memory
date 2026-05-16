@@ -195,7 +195,10 @@ class DoclingBackend(ExtractorBackend):
         """
         try:
             from PIL import Image
-            import google.generativeai as genai
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=FutureWarning)
+                import google.generativeai as genai
             import re
         except ImportError as e:
             print(f"  [LLM] ライブラリ不足: {e}", file=sys.stderr)
