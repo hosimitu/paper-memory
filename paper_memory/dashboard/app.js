@@ -342,9 +342,9 @@ class App {
         typeEl.innerText = typeLabels[note.element_type] || note.element_type;
         typeEl.style.color = TYPE_COLORS[note.element_type];
 
-        document.getElementById('modal-paper-title').innerText = note.source_paper.title;
+        document.getElementById('modal-paper-title').innerText = note.source_paper ? note.source_paper.title : 'Unknown';
 
-        const doi = note.source_paper.doi;
+        const doi = note.source_paper ? note.source_paper.doi : null;
         const doiArea = document.getElementById('modal-paper-doi');
         if (doi) {
             doiArea.innerHTML = `DOI: <a href="https://doi.org/${doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${doi}</a>`;
@@ -356,17 +356,23 @@ class App {
 
         const kwArea = document.getElementById('modal-keywords');
         kwArea.innerHTML = '';
-        (note.keywords || []).forEach(kw => {
-            const kwStr = i18n.getTranslatedString(kw);
-            const span = document.createElement('span');
-            span.className = 'keyword-tag clickable';
-            span.innerText = kwStr;
-            span.onclick = () => {
-                this.noteModal.classList.remove('active');
-                this.switchView('search', { query: kwStr });
-            };
-            kwArea.appendChild(span);
-        });
+        let keywords = note.keywords || [];
+        if (typeof keywords === 'string') {
+            try { keywords = JSON.parse(keywords); } catch(e) { keywords = [keywords]; }
+        }
+        if (Array.isArray(keywords)) {
+            keywords.forEach(kw => {
+                const kwStr = i18n.getTranslatedString(kw);
+                const span = document.createElement('span');
+                span.className = 'keyword-tag clickable';
+                span.innerText = kwStr;
+                span.onclick = () => {
+                    this.noteModal.classList.remove('active');
+                    this.switchView('search', { query: kwStr });
+                };
+                kwArea.appendChild(span);
+            });
+        }
 
         document.getElementById('modal-context').innerText = i18n.getTranslatedString(note.context) || '-';
 

@@ -97,9 +97,18 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                                             link_reason = h.get("reason", "")
                                             break
                                     
+                                    # content が dict（多言語形式）の場合にも対応
+                                    if isinstance(l_note.content, dict):
+                                        _content_str = (
+                                            l_note.content.get("en")
+                                            or l_note.content.get("local")
+                                            or next(iter(l_note.content.values()), "")
+                                        )
+                                    else:
+                                        _content_str = str(l_note.content or "")
                                     linked_notes.append({
                                         "id": l_note.id,
-                                        "content": l_note.content[:100] + "...",
+                                        "content": _content_str[:100] + ("..." if len(_content_str) > 100 else ""),
                                         "element_type": l_note.element_type,
                                         "reason": link_reason
                                     })
