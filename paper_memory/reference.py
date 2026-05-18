@@ -173,28 +173,46 @@ class ReferenceStore:
             cur = conn.execute("SELECT * FROM references_table WHERE LOWER(cited_by) LIKE ?", (f"%{cited_by.lower()}%",))
             return [self._row_to_ref(r) for r in cur.fetchall()]
 
-    def find_duplicate(self, title: str, doi: str = "") -> Optional[Reference]:
+    def find_duplicate(self, title, doi: str = "") -> Optional[Reference]:
+        """タイトルまたはDOIで重複チェック。title/doi が辞書型で渡された場合も安全に処理する。"""
+        # 型安全: title が辞書の場合は英語タイトルを取り出す
+        if isinstance(title, dict):
+            title = title.get("en") or title.get("local") or next(iter(title.values()), "")
+        title = str(title).strip() if title else ""
+        if isinstance(doi, dict):
+            doi = doi.get("en") or doi.get("local") or next(iter(doi.values()), "")
+        doi = str(doi).strip() if doi else ""
+
         with self.db.get_connection() as conn:
             if doi:
-                cur = conn.execute("SELECT * FROM references_table WHERE LOWER(doi) = ?", (doi.strip().lower(),))
+                cur = conn.execute("SELECT * FROM references_table WHERE LOWER(doi) = ?", (doi.lower(),))
                 row = cur.fetchone()
                 if row: return self._row_to_ref(row)
             
             if title:
-                cur = conn.execute("SELECT * FROM references_table WHERE LOWER(title) = ?", (title.strip().lower(),))
+                cur = conn.execute("SELECT * FROM references_table WHERE LOWER(title) = ?", (title.lower(),))
                 row = cur.fetchone()
                 if row: return self._row_to_ref(row)
         return None
 
-    def find_duplicate_in_history(self, title: str, doi: str = "") -> Optional[dict]:
+    def find_duplicate_in_history(self, title, doi: str = "") -> Optional[dict]:
+        """履歴内で重複チェック。title/doi が辞書型で渡された場合も安全に処理する。"""
+        # 型安全: title が辞書の場合は英語タイトルを取り出す
+        if isinstance(title, dict):
+            title = title.get("en") or title.get("local") or next(iter(title.values()), "")
+        title = str(title).strip() if title else ""
+        if isinstance(doi, dict):
+            doi = doi.get("en") or doi.get("local") or next(iter(doi.values()), "")
+        doi = str(doi).strip() if doi else ""
+
         with self.db.get_connection() as conn:
             if doi:
-                cur = conn.execute("SELECT * FROM reference_history WHERE LOWER(doi) = ?", (doi.strip().lower(),))
+                cur = conn.execute("SELECT * FROM reference_history WHERE LOWER(doi) = ?", (doi.lower(),))
                 row = cur.fetchone()
                 if row: return dict(row)
             
             if title:
-                cur = conn.execute("SELECT * FROM reference_history WHERE LOWER(title) = ?", (title.strip().lower(),))
+                cur = conn.execute("SELECT * FROM reference_history WHERE LOWER(title) = ?", (title.lower(),))
                 row = cur.fetchone()
                 if row: return dict(row)
         return None
