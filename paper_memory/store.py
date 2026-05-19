@@ -457,6 +457,198 @@ class NoteStore:
 
         return {"results": output, "method": "vector"}
 
+    def search_with_graph(
+        self,
+        query: str,
+        n_results: int = 10,
+        link_depth: int = 1,
+        expand_paper: bool = False,
+        distance_threshold: Optional[float] = None,
+        element_type_filter: Optional[str] = None,
+        max_total: int = 100,
+    ) -> dict:
+        """
+        グラフ探索付きセマンティック検索
+
+        ベクトル検索の結果を起点に、ノート間リンクを BFS で辿り、
+        オプションで同一論文の他ノートも展開して返す。
+
+        Args:
+            query: 検索クエリ
+            n_results: ベクトル検索の初期取得件数（デフォルト: 10）
+            link_depth: リンクを遡るホップ数（デフォルト: 1, 0 で従来検索）
+            expand_paper: 同一論文の他ノートを展開するか（デフォルト: False）
+            distance_threshold: 距離の閾値
+            element_type_filter: 要素タイプによるフィルタ（ベクトル検索のみ）
+            max_total: 最大結果数の上限（デフォルト: 100）
+
+        Returns:
+            dict: {
+                "results": list[dict],  # 各要素に source, depth, linked_from, link_reason を含む
+                "method": "vector" | "keyword",
+                "graph_stats": {"direct_hits": int, "linked_notes": int, "paper_expanded": int}
+            }
+        """
+        # link_depth=0 かつ expand_paper=False の場合は従来の search() にフォールバック
+        if link_depth <= 0 and not expand_paper:
+            base_results = self.search(
+                query, n_results,
+                element_type_filter=element_type_filter,
+                distance_threshold=distance_threshold,
+            )
+            # 従来の結果に source/depth フィールドを付与して統一フォーマットに
+            for r in base_results["results"]:
+                r["source"] = "direct"
+                r["depth"] = 0
+            base_results["graph_stats"] = {
+                "direct_hits": len(base_results["results"]),
+                "linked_notes": 0,
+                "paper_expanded": 0,
+            }
+            return base_results
+
+        # 1. ベクトル検索で初期ヒットを取得
+        base_results = self.search(
+            query, n_results,
+            element_type_filter=element_type_filter,
+            distance_threshold=distance_threshold,
+        )
+        method = base_results["method"]
+
+        # 統合結果: note_id -> result_dict のマッピング（重複排除用）
+        seen: Dict[str, dict] = {}
+        output: List[dict] = []
+
+        # 直接ヒットを登録
+        for r in base_results["results"]:
+            note_id = r["note"]["id"]
+            entry = {
+                "note": r["note"],
+                "distance": r["distance"],
+                "source": "direct",
+                "depth": 0,
+                "linked_from": None,
+                "link_reason": None,
+            }
+            seen[note_id] = entry
+            output.append(entry)
+
+        # 2. BFS でリンクを link_depth ホップまで辿る
+        if link_depth > 0:
+            # BFS のフロンティア: (note_id, depth, linked_from_id)
+            frontier = [(r["note"]["id"], 0) for r in base_results["results"]]
+            visited = set(seen.keys())
+
+            for current_depth in range(1, link_depth + 1):
+                if len(output) >= max_total:
+                    break
+
+                next_frontier = []
+                for parent_id, _ in frontier:
+                    if len(output) >= max_total:
+                        break
+
+                    # リンク先を取得（DB から直接取得して効率化）
+                    linked_ids_with_reasons = self._get_linked_ids_with_reasons(parent_id)
+
+                    for linked_id, reason in linked_ids_with_reasons:
+                        if linked_id in visited or len(output) >= max_total:
+                            continue
+                        visited.add(linked_id)
+
+                        linked_note = self.get(linked_id)
+                        if not linked_note:
+                            continue
+
+                        entry = {
+                            "note": linked_note.to_dict(),
+                            "distance": None,
+                            "source": "linked",
+                            "depth": current_depth,
+                            "linked_from": parent_id,
+                            "link_reason": reason,
+                        }
+                        seen[linked_id] = entry
+                        output.append(entry)
+                        next_frontier.append((linked_id, current_depth))
+
+                frontier = next_frontier
+
+        # 3. 同一論文の他ノートを展開
+        paper_expanded_count = 0
+        if expand_paper and len(output) < max_total:
+            # 直接ヒットした論文タイトルを収集
+            paper_titles = set()
+            for r in base_results["results"]:
+                sp = r["note"].get("source_paper", {})
+                title = sp.get("title", "")
+                if title and title != "Unknown Paper":
+                    paper_titles.add(title)
+
+            for title in paper_titles:
+                if len(output) >= max_total:
+                    break
+                paper_notes = self.list_by_paper(title)
+                for pn in paper_notes:
+                    if pn.id in seen or len(output) >= max_total:
+                        continue
+                    entry = {
+                        "note": pn.to_dict(),
+                        "distance": None,
+                        "source": "paper_expand",
+                        "depth": 0,
+                        "linked_from": None,
+                        "link_reason": None,
+                    }
+                    seen[pn.id] = entry
+                    output.append(entry)
+                    paper_expanded_count += 1
+
+        # 統計情報の集計
+        direct_count = sum(1 for r in output if r["source"] == "direct")
+        linked_count = sum(1 for r in output if r["source"] == "linked")
+
+        return {
+            "results": output,
+            "method": method,
+            "graph_stats": {
+                "direct_hits": direct_count,
+                "linked_notes": linked_count,
+                "paper_expanded": paper_expanded_count,
+            },
+        }
+
+    def _get_linked_ids_with_reasons(self, note_id: str) -> List[tuple]:
+        """
+        指定ノートのリンク先IDとリンク理由を取得する（双方向）
+
+        Returns:
+            list[tuple]: [(linked_id, reason), ...]
+        """
+        results = []
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            # source_id → target_id 方向
+            cur.execute(
+                "SELECT target_id, reason FROM note_links WHERE source_id = ?",
+                (note_id,)
+            )
+            for row in cur.fetchall():
+                reason = self._parse_maybe_json(row["reason"])
+                results.append((row["target_id"], reason))
+
+            # target_id → source_id 方向（双方向リンク対応）
+            cur.execute(
+                "SELECT source_id, reason FROM note_links WHERE target_id = ?",
+                (note_id,)
+            )
+            seen_ids = {r[0] for r in results}
+            for row in cur.fetchall():
+                if row["source_id"] not in seen_ids:
+                    reason = self._parse_maybe_json(row["reason"])
+                    results.append((row["source_id"], reason))
+
+        return results
 
     def find_neighbors(self, note_id: str, n_results: int = 10, element_type_filter: Optional[str] = None) -> list[dict]:
         """指定ノートの近傍ノートを検索"""

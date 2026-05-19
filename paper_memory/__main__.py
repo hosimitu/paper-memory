@@ -72,8 +72,10 @@ def create_parser() -> argparse.ArgumentParser:
     # --- search コマンド ---
     search_parser = subparsers.add_parser("search", help="セマンティック検索")
     search_parser.add_argument("--query", required=True, help="検索クエリ")
-    search_parser.add_argument("--n", type=int, default=10, help="結果数（デフォルト: 10）")
+    search_parser.add_argument("--n", type=int, default=10, help="ベクトル検索の取得件数（デフォルト: 10）")
     search_parser.add_argument("--threshold", type=float, default=None, help="距離の閾値（例: 0.45。指定すると閾値以下の結果をすべて返します）")
+    search_parser.add_argument("--link-depth", type=int, default=1, help="リンクを遜るホップ数（デフォルト: 1, 0 でリンク探索無し）")
+    search_parser.add_argument("--expand-paper", action="store_true", help="ヒットしたノートと同じ論文の他ノートも展開する")
 
     # --- list コマンド ---
     list_parser = subparsers.add_parser("list", help="ノート一覧")
@@ -349,12 +351,19 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
 
 
 def cmd_search(args, store: NoteStore) -> None:
-    """セマンティック検索コマンド"""
-    results = store.search(args.query, args.n, distance_threshold=args.threshold)
+    """グラフ探索付きセマンティック検索コマンド"""
+    results = store.search_with_graph(
+        args.query,
+        n_results=args.n,
+        link_depth=args.link_depth,
+        expand_paper=args.expand_paper,
+        distance_threshold=args.threshold,
+    )
     output_json({
         "status": "success",
         "query": args.query,
-        "result_count": len(results),
+        "result_count": len(results["results"]),
+        "graph_stats": results.get("graph_stats"),
         "results": results,
     })
 

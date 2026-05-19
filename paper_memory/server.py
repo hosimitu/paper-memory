@@ -149,15 +149,26 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     except ValueError:
                         threshold = None
                 
-                # 閾値が指定されている場合は n_results を大きめにする
                 n = int(query.get("n", [10])[0])
-                search_data = store.search(q, n_results=n, distance_threshold=threshold)
+                link_depth = int(query.get("link_depth", [1])[0])
+                expand_paper = query.get("expand_paper", ["false"])[0].lower() == "true"
+                
+                search_data = store.search_with_graph(
+                    q,
+                    n_results=n,
+                    link_depth=link_depth,
+                    expand_paper=expand_paper,
+                    distance_threshold=threshold,
+                )
                 data = {
                     "results": search_data["results"],
                     "search_method": search_data["method"],
+                    "graph_stats": search_data.get("graph_stats"),
                     "query": q,
                     "threshold": threshold,
-                    "n": n
+                    "n": n,
+                    "link_depth": link_depth,
+                    "expand_paper": expand_paper
                 }
             elif path == "/api/qa/history":
                 limit = int(query.get("limit", [10])[0])
@@ -262,12 +273,22 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     status_code = 400
                     data = {"error": "Query is required"}
                 else:
-                    # 1. 検索実行（閾値ベースで関連性の高いもののみ抽出）
+                    # 1. グラフ探索付き検索を実行
                     threshold = post_data.get("threshold", 0.45)
                     n_results = post_data.get("n", 15)
-                    search_data = store.search(query_text, n_results=n_results, distance_threshold=threshold)
+                    link_depth = post_data.get("link_depth", 1)
+                    expand_paper = post_data.get("expand_paper", False)
+                    
+                    search_data = store.search_with_graph(
+                        query_text,
+                        n_results=n_results,
+                        link_depth=link_depth,
+                        expand_paper=expand_paper,
+                        distance_threshold=threshold,
+                    )
                     search_results = search_data["results"]
                     search_method = search_data["method"]
+                    graph_stats = search_data.get("graph_stats", {})
                     
                     if not search_results:
                         # 関連ノートが見つからない場合は、AIへのプロンプト送信を中断してユーザーに通知する
@@ -284,7 +305,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
                         return
                     
-                    # 2. プロンプト構築
+                    # 2. プロンプト構築（リンク経由ノートの理由を注入）
                     context_lines = []
                     references = []
                     for i, res in enumerate(search_results):
@@ -293,8 +314,32 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         content = note["content"]
                         note_id = note["id"]
                         ref_num = i + 1
-                        context_lines.append(f"[{ref_num}] Paper: {title}\nNote content: {content}\n")
-                        references.append({"id": ref_num, "title": title, "note_id": note_id})
+                        source = res.get("source", "direct")
+                        
+                        # ノートの出自に応じてコンテキストに注釈を追加
+                        annotation = ""
+                        if source == "linked":
+                            link_reason = res.get("link_reason", "")
+                            depth = res.get("depth", 1)
+                            # 多言語 reason の平坦化
+                            if isinstance(link_reason, dict):
+                                link_reason = link_reason.get("en") or link_reason.get("local") or next(iter(link_reason.values()), "")
+                            annotation = f"(Linked via {depth}-hop: {link_reason})" if link_reason else f"(Linked via {depth}-hop)"
+                        elif source == "paper_expand":
+                            annotation = "(Same paper context)"
+                        
+                        line = f"[{ref_num}] Paper: {title}\nNote content: {content}"
+                        if annotation:
+                            line += f"\n{annotation}"
+                        line += "\n"
+                        context_lines.append(line)
+                        references.append({
+                            "id": ref_num,
+                            "title": title,
+                            "note_id": note_id,
+                            "source": source,
+                            "depth": res.get("depth", 0),
+                        })
                         
                     context_str = "\n".join(context_lines)
                     
@@ -348,6 +393,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         "answer": answer_text,
                         "references": references,
                         "search_method": search_method,
+                        "graph_stats": graph_stats,
                         "api_usage": {
                             "used": update_api_usage(),
                             "limit": API_LIMIT_RPM

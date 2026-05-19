@@ -573,9 +573,10 @@ body {
 
 .search-settings {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
-    gap: 24px;
+    flex-wrap: wrap;
+    gap: 16px 24px;
     margin-bottom: 48px;
     background: var(--bg-secondary);
     padding: 16px 24px;
@@ -588,6 +589,7 @@ body {
     align-items: center;
     gap: 12px;
     flex: 1;
+    min-width: 200px;
     max-width: 400px;
 }
 
@@ -622,6 +624,101 @@ body {
     color: var(--accent);
     min-width: 40px;
     font-weight: 600;
+}
+
+/* グラフ探索 UI */
+.graph-select {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    border-radius: 8px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.graph-select:focus {
+    border-color: var(--accent);
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* ソースバッジ */
+.source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+}
+
+.source-direct {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.source-linked {
+    background: rgba(139, 92, 246, 0.12);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.source-paper {
+    background: rgba(16, 185, 129, 0.12);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+/* グラフ統計バッジ */
+.graph-stats-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    font-weight: 500;
+}
+
+/* リンク理由テキスト */
+.link-reason-badge {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    margin-top: 6px;
+    margin-bottom: 2px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    line-height: 1.4;
+    padding: 4px 8px;
+    background: rgba(139, 92, 246, 0.06);
+    border-left: 2px solid rgba(139, 92, 246, 0.3);
+    border-radius: 0 6px 6px 0;
 }
 
 /* Modal Styles */
