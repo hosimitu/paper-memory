@@ -27,6 +27,66 @@ const TYPE_COLORS = {
     definition: 'var(--color-definition)'
 };
 
+// キーワードを現在の言語に合わせて平滑化した文字列配列として取得する
+const getKeywordsList = (keywords) => {
+    if (!keywords) return [];
+    
+    // 文字列の場合はJSONパースを試みる
+    if (typeof keywords === 'string') {
+        try {
+            keywords = JSON.parse(keywords);
+        } catch(e) {
+            return [keywords];
+        }
+    }
+    
+    // 配列の場合は各要素を文字列または翻訳オブジェクトとして解決
+    if (Array.isArray(keywords)) {
+        return keywords.map(kw => {
+            if (kw && typeof kw === 'object') {
+                return i18n.getTranslatedString(kw);
+            }
+            return kw ? String(kw) : '';
+        }).filter(Boolean);
+    }
+    
+    // オブジェクトの場合は言語別配列、または多言語文字列オブジェクトとして解決
+    if (typeof keywords === 'object') {
+        const lang = i18n.currentLang();
+        const kwList = keywords[lang] || keywords['en'] || keywords['local'] || Object.values(keywords)[0];
+        if (Array.isArray(kwList)) {
+            return kwList.map(String).filter(Boolean);
+        }
+        if (typeof kwList === 'string') {
+            return [kwList];
+        }
+        return [i18n.getTranslatedString(keywords)].filter(Boolean);
+    }
+    
+    return [String(keywords)];
+};
+
+// 著者情報を文字列の配列として安全に取得する
+const getAuthorsList = (authors) => {
+    if (!authors) return [];
+    if (Array.isArray(authors)) {
+        return authors;
+    }
+    if (typeof authors === 'string') {
+        try {
+            const parsed = JSON.parse(authors);
+            if (Array.isArray(parsed)) {
+                return parsed;
+            }
+            return [parsed];
+        } catch (e) {
+            // カンマ区切りの文字列などの場合は分割する
+            return authors.split(',').map(s => s.trim()).filter(Boolean);
+        }
+    }
+    return [String(authors)];
+};
+
 class App {
     constructor() {
         this.contentArea = document.getElementById('content-area');
@@ -324,7 +384,8 @@ class App {
             const filtered = notes.filter(n => {
                 const c = i18n.getTranslatedString(n.content).toLowerCase();
                 const t = n.source_paper.title.toLowerCase();
-                const kwMatch = n.keywords && n.keywords.some(k => i18n.getTranslatedString(k).toLowerCase().includes(q));
+                const kws = getKeywordsList(n.keywords);
+                const kwMatch = kws.some(k => k.toLowerCase().includes(q));
                 return c.includes(q) || t.includes(q) || kwMatch;
             });
             renderList(filtered);
@@ -356,23 +417,17 @@ class App {
 
         const kwArea = document.getElementById('modal-keywords');
         kwArea.innerHTML = '';
-        let keywords = note.keywords || [];
-        if (typeof keywords === 'string') {
-            try { keywords = JSON.parse(keywords); } catch(e) { keywords = [keywords]; }
-        }
-        if (Array.isArray(keywords)) {
-            keywords.forEach(kw => {
-                const kwStr = i18n.getTranslatedString(kw);
-                const span = document.createElement('span');
-                span.className = 'keyword-tag clickable';
-                span.innerText = kwStr;
-                span.onclick = () => {
-                    this.noteModal.classList.remove('active');
-                    this.switchView('search', { query: kwStr });
-                };
-                kwArea.appendChild(span);
-            });
-        }
+        const keywords = getKeywordsList(note.keywords);
+        keywords.forEach(kwStr => {
+            const span = document.createElement('span');
+            span.className = 'keyword-tag clickable';
+            span.innerText = kwStr;
+            span.onclick = () => {
+                this.noteModal.classList.remove('active');
+                this.switchView('search', { query: kwStr });
+            };
+            kwArea.appendChild(span);
+        });
 
         document.getElementById('modal-context').innerText = i18n.getTranslatedString(note.context) || '-';
 
@@ -419,7 +474,7 @@ class App {
             card.innerHTML = `
                 <h4>[${index + 1}] ${paper.title}</h4>
                 <div class="paper-meta">
-                    <p>${i18n.t('modal.authors') || 'Authors'}: ${JSON.parse(paper.authors).join(', ')}</p>
+                    <p>${i18n.t('modal.authors') || 'Authors'}: ${getAuthorsList(paper.authors).join(', ')}</p>
                     <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
                     <p>DOI: ${doiLink}</p>
                 </div>
@@ -478,10 +533,8 @@ class App {
 
         const kwArea = document.getElementById('modal-keywords');
         kwArea.innerHTML = '';
-        let keywords = [];
-        try { keywords = JSON.parse(ref.keywords || '[]'); } catch (e) { }
-        keywords.forEach(kw => {
-            const kwStr = i18n.getTranslatedString(kw);
+        const keywords = getKeywordsList(ref.keywords);
+        keywords.forEach(kwStr => {
             const span = document.createElement('span');
             span.className = 'keyword-tag clickable';
             span.innerText = kwStr;
@@ -914,7 +967,7 @@ class App {
                 card.innerHTML = `
                     <div class="note-header">
                         <span class="note-type">${typeLabels[note.element_type] || note.element_type}</span>
-                        ${score !== null ? `<span class="score-badge">${currentLang === 'ja' ? '適合度' : 'Match'}: ${score}%</span>` : ''}
+                        ${score !== null ? `<span class="score-badge">${i18n.currentLang() === 'ja' ? '適合度' : 'Match'}: ${score}%</span>` : ''}
                     </div>
                     <div class="note-content">${i18n.getTranslatedString(note.content)}</div>
                     <div class="note-footer">${note.source_paper.title}</div>
