@@ -588,9 +588,9 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    flex: 1;
-    min-width: 200px;
-    max-width: 400px;
+    flex: 1 1 280px;
+    min-width: 280px;
+    max-width: 450px;
 }
 
 .threshold-control label {
