@@ -621,6 +621,26 @@ class App {
                         <input type="range" id="threshold-slider" class="threshold-slider" min="0.2" max="0.8" step="0.05" value="0.45">
                         <span id="threshold-display" class="threshold-value">0.45</span>
                     </div>
+                    <div class="threshold-control">
+                        <label for="n-results-slider">${i18n.t('search.n_results')}</label>
+                        <input type="range" id="n-results-slider" class="threshold-slider" min="5" max="50" step="5" value="10">
+                        <span id="n-results-display" class="threshold-value">10</span>
+                    </div>
+                    <div class="threshold-control">
+                        <label for="link-depth-select">${i18n.t('search.link_depth')}</label>
+                        <select id="link-depth-select" class="graph-select">
+                            <option value="0">${i18n.t('search.link_depth.0')}</option>
+                            <option value="1" selected>${i18n.t('search.link_depth.1')}</option>
+                            <option value="2">${i18n.t('search.link_depth.2')}</option>
+                            <option value="3">${i18n.t('search.link_depth.3')}</option>
+                        </select>
+                    </div>
+                    <div class="threshold-control">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="expand-paper-toggle">
+                            <span>${i18n.t('search.expand_paper')}</span>
+                        </label>
+                    </div>
                 </div>
                 
                 <div id="search-results-meta" style="margin-bottom: 16px; color: var(--text-secondary); font-size: 0.9rem;"></div>
@@ -632,20 +652,34 @@ class App {
         const resultsArea = document.getElementById('search-results');
         const thresholdSlider = document.getElementById('threshold-slider');
         const thresholdDisplay = document.getElementById('threshold-display');
+        const nResultsSlider = document.getElementById('n-results-slider');
+        const nResultsDisplay = document.getElementById('n-results-display');
+        const linkDepthSelect = document.getElementById('link-depth-select');
+        const expandPaperToggle = document.getElementById('expand-paper-toggle');
 
         thresholdSlider.addEventListener('input', (e) => {
             thresholdDisplay.innerText = e.target.value;
         });
+        nResultsSlider.addEventListener('input', (e) => {
+            nResultsDisplay.innerText = e.target.value;
+        });
+
+        const getSearchParams = () => ({
+            threshold: parseFloat(thresholdSlider.value),
+            n: parseInt(nResultsSlider.value),
+            linkDepth: parseInt(linkDepthSelect.value),
+            expandPaper: expandPaperToggle.checked,
+        });
 
         input.addEventListener('keypress', async (e) => {
             if (e.key === 'Enter') {
-                this.executeSearch(input.value, resultsArea, parseFloat(thresholdSlider.value));
+                this.executeSearch(input.value, resultsArea, getSearchParams());
             }
         });
 
         if (params.query) {
             input.value = params.query;
-            this.executeSearch(params.query, resultsArea, 0.45);
+            this.executeSearch(params.query, resultsArea, getSearchParams());
         }
 
         lucide.createIcons();
@@ -674,6 +708,26 @@ class App {
                             <input type="range" id="qa-threshold-slider" class="threshold-slider" min="0.2" max="0.8" step="0.05" value="0.45">
                             <span id="qa-threshold-display" class="threshold-value">0.45</span>
                         </div>
+                        <div class="threshold-control">
+                            <label for="qa-n-results-slider">${i18n.t('search.n_results')}</label>
+                            <input type="range" id="qa-n-results-slider" class="threshold-slider" min="5" max="50" step="5" value="15">
+                            <span id="qa-n-results-display" class="threshold-value">15</span>
+                        </div>
+                        <div class="threshold-control">
+                            <label for="qa-link-depth-select">${i18n.t('search.link_depth')}</label>
+                            <select id="qa-link-depth-select" class="graph-select">
+                                <option value="0">${i18n.t('search.link_depth.0')}</option>
+                                <option value="1" selected>${i18n.t('search.link_depth.1')}</option>
+                                <option value="2">${i18n.t('search.link_depth.2')}</option>
+                                <option value="3">${i18n.t('search.link_depth.3')}</option>
+                            </select>
+                        </div>
+                        <div class="threshold-control">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="qa-expand-paper-toggle">
+                                <span>${i18n.t('search.expand_paper')}</span>
+                            </label>
+                        </div>
                     </div>
 
                     <div id="qa-results" style="margin-top: 24px;"></div>
@@ -696,14 +750,28 @@ class App {
         const qaResultsArea = document.getElementById('qa-results');
         const qaThresholdSlider = document.getElementById('qa-threshold-slider');
         const qaThresholdDisplay = document.getElementById('qa-threshold-display');
+        const qaNResultsSlider = document.getElementById('qa-n-results-slider');
+        const qaNResultsDisplay = document.getElementById('qa-n-results-display');
+        const qaLinkDepthSelect = document.getElementById('qa-link-depth-select');
+        const qaExpandPaperToggle = document.getElementById('qa-expand-paper-toggle');
 
         qaThresholdSlider.addEventListener('input', (e) => {
             qaThresholdDisplay.innerText = e.target.value;
         });
+        qaNResultsSlider.addEventListener('input', (e) => {
+            qaNResultsDisplay.innerText = e.target.value;
+        });
+
+        const getQAParams = () => ({
+            threshold: parseFloat(qaThresholdSlider.value),
+            n: parseInt(qaNResultsSlider.value),
+            linkDepth: parseInt(qaLinkDepthSelect.value),
+            expandPaper: qaExpandPaperToggle.checked,
+        });
 
         const triggerQA = () => {
             if (qaInput.value.trim()) {
-                this.executeQA(qaInput.value, qaResultsArea, parseFloat(qaThresholdSlider.value));
+                this.executeQA(qaInput.value, qaResultsArea, getQAParams());
             }
         };
 
@@ -832,7 +900,7 @@ class App {
         }
     }
 
-    displayQAResult(query, answer, references, resultsArea) {
+    displayQAResult(query, answer, references, resultsArea, searchMethod = 'vector', graphStats = null) {
         const dedentedAnswer = (str) => {
             const lines = str.split('\n');
             const firstNonEmptyLine = lines.find(l => l.trim().length > 0);
@@ -843,12 +911,24 @@ class App {
             return lines.map(l => l.startsWith(indent) ? l.slice(indent.length) : l).join('\n').trim();
         };
 
+        let statsHtml = '';
+        if (graphStats && (graphStats.linked_notes > 0 || graphStats.paper_expanded > 0)) {
+            statsHtml = `<span class="graph-stats-badge">
+                ${i18n.t('search.graph_stats', {
+                    direct: graphStats.direct_hits,
+                    linked: graphStats.linked_notes,
+                    paper: graphStats.paper_expanded
+                })}
+            </span>`;
+        }
+
         resultsArea.innerHTML = `
                 <div style="font-weight: 700; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <i data-lucide="help-circle"></i> ${i18n.t('qa.result.query')}: ${query}
                     </div>
-                    ${this.getMethodBadgeHtml(arguments[4] || 'vector')}
+                    ${this.getMethodBadgeHtml(searchMethod)}
+                    ${statsHtml}
                 </div>
                 <div class="modal-text-block markdown-content" style="font-size: 1.05rem; line-height: 1.8; color: var(--text-primary); margin-bottom: 24px;">
                     ${marked.parse(dedentedAnswer(answer))}
@@ -876,8 +956,12 @@ class App {
         lucide.createIcons();
     }
 
-    async executeQA(query, resultsArea, threshold = 0.45) {
+    async executeQA(query, resultsArea, params = {}) {
         if (!query || !query.trim()) return;
+        const threshold = params.threshold || 0.45;
+        const n = params.n || 15;
+        const linkDepth = params.linkDepth !== undefined ? params.linkDepth : 1;
+        const expandPaper = params.expandPaper || false;
 
         resultsArea.innerHTML = `
             <div class="loader-container" style="display:flex; flex-direction:column; gap:12px; align-items:center;">
@@ -889,7 +973,7 @@ class App {
             const res = await fetch(API_BASE + '/qa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, threshold, n: 15, lang: i18n.currentLang() })
+                body: JSON.stringify({ query, threshold, n, link_depth: linkDepth, expand_paper: expandPaper, lang: i18n.currentLang() })
             });
 
             const data = await res.json();
@@ -906,7 +990,7 @@ class App {
             }
 
             if (data.answer) {
-                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method);
+                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method, data.graph_stats);
                 this.loadQAHistory(); // 履歴を更新
             } else {
                 resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: 'No answer returned' })}</div>`;
@@ -917,18 +1001,22 @@ class App {
         lucide.createIcons();
     }
 
-    async executeSearch(query, resultsArea, threshold = 0.45) {
+    async executeSearch(query, resultsArea, params = {}) {
         if (!query || !query.trim()) return;
+        const threshold = params.threshold || 0.45;
+        const n = params.n || 10;
+        const linkDepth = params.linkDepth !== undefined ? params.linkDepth : 1;
+        const expandPaper = params.expandPaper || false;
 
         const metaArea = document.getElementById('search-results-meta');
         if (metaArea) metaArea.innerText = '';
         resultsArea.innerHTML = '<div class="loader-container"><div class="loader"></div></div>';
 
         try {
-            // n=50 で多めに取得し、サーバー側の閾値フィルタリングを利用
-            const endpoint = `/search?q=${encodeURIComponent(query)}&threshold=${threshold}&n=50`;
+            const endpoint = `/search?q=${encodeURIComponent(query)}&threshold=${threshold}&n=${n}&link_depth=${linkDepth}&expand_paper=${expandPaper}`;
             const data = await this.fetchJson(endpoint, false);
             const results = data.results || [];
+            const graphStats = data.graph_stats;
 
             resultsArea.innerHTML = '';
 
@@ -939,27 +1027,66 @@ class App {
 
             if (metaArea) {
                 const countText = `${results.length} ${i18n.currentLang() === 'ja' ? '件の関連ノートが見つかりました' : 'notes found'}`;
+                let statsHtml = '';
+                if (graphStats && (graphStats.linked_notes > 0 || graphStats.paper_expanded > 0)) {
+                    statsHtml = `<span class="graph-stats-badge">
+                        ${i18n.t('search.graph_stats', {
+                            direct: graphStats.direct_hits,
+                            linked: graphStats.linked_notes,
+                            paper: graphStats.paper_expanded
+                        })}
+                    </span>`;
+                }
                 metaArea.innerHTML = `
-                    <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                         <span>${countText} (${i18n.t('search.threshold').split('(')[0].trim()}: ${threshold})</span>
                         ${this.getMethodBadgeHtml(data.search_method)}
+                        ${statsHtml}
                     </div>
                 `;
             }
 
-            // 要素タイプ順にソート（元々のロジックを維持）
+            // ソース順でソート: direct → linked → paper_expand、その中でタイプ順
+            const sourceOrder = { direct: 0, linked: 1, paper_expand: 2 };
             const typeOrder = Object.keys(getTypeLabels());
             results.sort((a, b) => {
-                const orderA = typeOrder.indexOf(a.note.element_type);
-                const orderB = typeOrder.indexOf(b.note.element_type);
-                return orderA - orderB;
+                const sA = sourceOrder[a.source] ?? 9;
+                const sB = sourceOrder[b.source] ?? 9;
+                if (sA !== sB) return sA - sB;
+                return typeOrder.indexOf(a.note.element_type) - typeOrder.indexOf(b.note.element_type);
             });
 
             results.forEach(res => {
                 const note = res.note;
                 const typeLabels = getTypeLabels();
-                // Cosine Distance をスコア（パーセント）に変換 (1 - distance) * 100
-                const score = res.distance !== null ? Math.round((1 - res.distance) * 100) : null;
+                const score = res.distance !== null && res.distance !== undefined
+                    ? Math.round((1 - res.distance) * 100) : null;
+                const source = res.source || 'direct';
+                const depth = res.depth || 0;
+
+                // ソースバッジの生成
+                let sourceBadge = '';
+                if (source === 'direct') {
+                    sourceBadge = `<span class="source-badge source-direct"><i data-lucide="zap" style="width:11px;height:11px;"></i> ${i18n.t('search.badge.direct')}</span>`;
+                } else if (source === 'linked') {
+                    sourceBadge = `<span class="source-badge source-linked"><i data-lucide="git-branch" style="width:11px;height:11px;"></i> ${i18n.t('search.badge.linked', { depth })}</span>`;
+                } else if (source === 'paper_expand') {
+                    sourceBadge = `<span class="source-badge source-paper"><i data-lucide="book-open" style="width:11px;height:11px;"></i> ${i18n.t('search.badge.paper_expand')}</span>`;
+                }
+
+                // リンク理由の表示（linked の場合）
+                let linkReasonHtml = '';
+                if (source === 'linked' && res.link_reason) {
+                    const reasonText = typeof res.link_reason === 'object'
+                        ? i18n.getTranslatedString(res.link_reason)
+                        : String(res.link_reason);
+                    if (reasonText) {
+                        linkReasonHtml = `<div class="link-reason-badge">
+                            <i data-lucide="link" style="width:11px;height:11px;"></i>
+                            ${i18n.t('search.linked_from')} ${reasonText}
+                        </div>`;
+                    }
+                }
 
                 const card = document.createElement('div');
                 card.className = 'note-card';
@@ -967,14 +1094,19 @@ class App {
                 card.innerHTML = `
                     <div class="note-header">
                         <span class="note-type">${typeLabels[note.element_type] || note.element_type}</span>
-                        ${score !== null ? `<span class="score-badge">${i18n.currentLang() === 'ja' ? '適合度' : 'Match'}: ${score}%</span>` : ''}
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            ${sourceBadge}
+                            ${score !== null ? `<span class="score-badge">${i18n.currentLang() === 'ja' ? '適合度' : 'Match'}: ${score}%</span>` : ''}
+                        </div>
                     </div>
                     <div class="note-content">${i18n.getTranslatedString(note.content)}</div>
+                    ${linkReasonHtml}
                     <div class="note-footer">${note.source_paper.title}</div>
                 `;
                 card.onclick = () => this.showNoteDetail(note.id);
                 resultsArea.appendChild(card);
             });
+            lucide.createIcons();
         } catch (err) {
             resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: err.message })}</div>`;
         }
