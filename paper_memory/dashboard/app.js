@@ -821,7 +821,7 @@ class App {
 
         try {
             // limit=11 で次ページがあるか確認する
-            const history = await this.fetchJson(`/qa/history?limit=11&offset=${this.qaHistoryOffset}`);
+            const history = await this.fetchJson(`/qa/history?limit=11&offset=${this.qaHistoryOffset}`, false);
 
             if (!isAppend) listArea.innerHTML = '';
 
