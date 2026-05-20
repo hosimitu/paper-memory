@@ -900,7 +900,7 @@ class App {
         }
     }
 
-    displayQAResult(query, answer, references, resultsArea) {
+    displayQAResult(query, answer, references, resultsArea, searchMethod = 'vector', graphStats = null) {
         const dedentedAnswer = (str) => {
             const lines = str.split('\n');
             const firstNonEmptyLine = lines.find(l => l.trim().length > 0);
@@ -911,12 +911,24 @@ class App {
             return lines.map(l => l.startsWith(indent) ? l.slice(indent.length) : l).join('\n').trim();
         };
 
+        let statsHtml = '';
+        if (graphStats && (graphStats.linked_notes > 0 || graphStats.paper_expanded > 0)) {
+            statsHtml = `<span class="graph-stats-badge">
+                ${i18n.t('search.graph_stats', {
+                    direct: graphStats.direct_hits,
+                    linked: graphStats.linked_notes,
+                    paper: graphStats.paper_expanded
+                })}
+            </span>`;
+        }
+
         resultsArea.innerHTML = `
                 <div style="font-weight: 700; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <i data-lucide="help-circle"></i> ${i18n.t('qa.result.query')}: ${query}
                     </div>
-                    ${this.getMethodBadgeHtml(arguments[4] || 'vector')}
+                    ${this.getMethodBadgeHtml(searchMethod)}
+                    ${statsHtml}
                 </div>
                 <div class="modal-text-block markdown-content" style="font-size: 1.05rem; line-height: 1.8; color: var(--text-primary); margin-bottom: 24px;">
                     ${marked.parse(dedentedAnswer(answer))}
@@ -978,7 +990,7 @@ class App {
             }
 
             if (data.answer) {
-                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method);
+                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method, data.graph_stats);
                 this.loadQAHistory(); // 履歴を更新
             } else {
                 resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: 'No answer returned' })}</div>`;
