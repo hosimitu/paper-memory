@@ -99,16 +99,17 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                                     
                                     # content が dict（多言語形式）の場合にも対応
                                     if isinstance(l_note.content, dict):
-                                        _content_str = (
-                                            l_note.content.get("en")
-                                            or l_note.content.get("local")
-                                            or next(iter(l_note.content.values()), "")
-                                        )
+                                        _content_val = {}
+                                        for k, v in l_note.content.items():
+                                            vs = str(v or "")
+                                            _content_val[k] = vs[:100] + ("..." if len(vs) > 100 else "")
                                     else:
-                                        _content_str = str(l_note.content or "")
+                                        vs = str(l_note.content or "")
+                                        _content_val = vs[:100] + ("..." if len(vs) > 100 else "")
+                                        
                                     linked_notes.append({
                                         "id": l_note.id,
-                                        "content": _content_str[:100] + ("..." if len(_content_str) > 100 else ""),
+                                        "content": _content_val,
                                         "element_type": l_note.element_type,
                                         "reason": link_reason
                                     })
