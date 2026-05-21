@@ -241,7 +241,11 @@ function getTranslatedString(val) {
     if (!val) return '';
     if (typeof val === 'string') return val;
     if (typeof val === 'object') {
-        return val[currentLang] || val['en'] || Object.values(val)[0] || '';
+        let text = val[currentLang];
+        if (!text && currentLang !== 'en') {
+            text = val['local'];
+        }
+        return text || val['en'] || Object.values(val)[0] || '';
     }
     return String(val);
 }
