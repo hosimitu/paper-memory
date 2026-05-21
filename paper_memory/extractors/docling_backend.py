@@ -249,6 +249,7 @@ class DoclingBackend(ExtractorBackend):
                     print(f"  [LLM] RPM 制限 (15 RPM) のため {sleep_time:.1f} 秒待機します...")
                     time.sleep(sleep_time)
 
+            fallback = False
             try:
                 print(f"  [LLM] {item_type} 画像を解析中 ({idx+1}/{len(image_paths)}): {img_id}")
                 img = Image.open(img_path)
@@ -269,23 +270,32 @@ class DoclingBackend(ExtractorBackend):
                             continue
                         raise e
 
-                if not response: continue
-                result_text = response.text.strip()
-
-                if item_type == "table":
-                    table_match = re.search(r'((?:[ \t]*\|[^\n]*\n?)+)', result_text)
-                    content = table_match.group(1).strip() if table_match else result_text
+                if not response:
+                    fallback = True
                 else:
-                    # 数式の場合は LaTeX ブロックを抽出
-                    formula_match = re.search(r'(\$\$.*?\$\$|\$.*?\$)', result_text, re.DOTALL)
-                    content = formula_match.group(1).strip() if formula_match else result_text
-
-                start, end = match.span()
-                marker = f"<!-- LLM解析済み{item_type}: {img_id} -->"
-                updated_md = updated_md[:start] + f"{marker}\n{content}\n" + updated_md[end:]
-                print(f"  [LLM] {item_type} を置換しました: {img_id}")
+                    result_text = response.text.strip()
+    
+                    if item_type == "table":
+                        table_match = re.search(r'((?:[ \t]*\|[^\n]*\n?)+)', result_text)
+                        content = table_match.group(1).strip() if table_match else result_text
+                    else:
+                        # 数式の場合は LaTeX ブロックを抽出
+                        formula_match = re.search(r'(\$\$.*?\$\$|\$.*?\$)', result_text, re.DOTALL)
+                        content = formula_match.group(1).strip() if formula_match else result_text
+    
+                    start, end = match.span()
+                    marker = f"<!-- LLM解析済み{item_type}: {img_id} -->"
+                    updated_md = updated_md[:start] + f"{marker}\n{content}\n" + updated_md[end:]
+                    print(f"  [LLM] {item_type} を置換しました: {img_id}")
 
             except Exception as e:
                 print(f"  [LLM] 解析エラー ({img_id}): {e}", file=sys.stderr)
+                fallback = True
+            
+            if fallback:
+                if item_type == "formula":
+                    start, end = match.span()
+                    fallback_content = f"![image](images/{img_id}.png)"
+                    updated_md = updated_md[:start] + fallback_content + updated_md[end:]
 
         return updated_md
