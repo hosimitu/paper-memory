@@ -29,6 +29,22 @@ from .reference import ReferenceStore
 from .ai_models import QA_MODEL
 from .config import DEFAULT_LANGUAGE
 import datetime
+import re
+
+def get_markdown_path(pdf_path_str: str, base_dir: str = "extracted") -> Path:
+    if not pdf_path_str:
+        return None
+    pdf_path = Path(pdf_path_str)
+    stem = pdf_path.stem
+    safe_stem = stem.encode('ascii', 'ignore').decode('ascii')
+    if not safe_stem.strip():
+        safe_stem = "paper"
+    clean_name = re.sub(r'[^a-zA-Z0-9\s_-]', '', safe_stem).strip().replace(' ', '_')
+    if len(clean_name) > 80:
+        clean_name = clean_name[:80].rstrip('_')
+    
+    project_root = Path(__file__).parent.parent
+    return (project_root / base_dir / clean_name / f"{clean_name}.md").resolve()
 
 # レート制限管理 (RPM)
 API_USAGE_LOG = []
@@ -86,6 +102,11 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         note = store.get(note_id)
                         if note:
                             res_data = note.to_dict()
+                            
+                            md_path = get_markdown_path(note.source_paper.pdf_path) if note.source_paper else None
+                            res_data["has_markdown"] = bool(md_path and md_path.exists())
+                            res_data["paper_id"] = note.source_paper.id if hasattr(note.source_paper, 'id') else None
+
                             linked_notes = []
                             for l_id in note.links:
                                 l_note = store.get(l_id)
@@ -125,7 +146,13 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             elif path == "/api/papers":
                 with store.db.get_connection() as conn:
                     cur = conn.execute("SELECT * FROM papers ORDER BY year DESC, title ASC")
-                    data = [dict(r) for r in cur.fetchall()]
+                    papers = []
+                    for r in cur.fetchall():
+                        p = dict(r)
+                        md_path = get_markdown_path(p.get("pdf_path"))
+                        p["has_markdown"] = bool(md_path and md_path.exists())
+                        papers.append(p)
+                    data = papers
             elif path.startswith("/api/papers/"):
                 parts = path.strip("/").split("/")
                 if len(parts) == 4 and parts[3] == "notes":
@@ -133,6 +160,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     data = [n.to_dict() for n in store.list_by_paper_id(paper_id)]
                 else:
                     status = 404
+
 
             # --- 参考文献関連 ---
             elif path == "/api/references":
@@ -434,7 +462,72 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     status_code = 400
                     data = {"error": "Invalid path"}
             
+            elif path.startswith("/api/notes/") and path.endswith("/open-markdown"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4:
+                    note_id = parts[2]
+                    note = store.get(note_id)
+                    if note and getattr(note, 'source_paper', None) and getattr(note.source_paper, 'pdf_path', None):
+                        md_path = get_markdown_path(note.source_paper.pdf_path)
+                        if md_path and md_path.exists():
+                            try:
+                                import os
+                                if os.name == 'nt':
+                                    os.startfile(md_path)
+                                else:
+                                    import subprocess
+                                    import sys
+                                    opener = "open" if sys.platform == "darwin" else "xdg-open"
+                                    subprocess.call([opener, str(md_path)])
+                                data = {"status": "success"}
+                            except Exception as e:
+                                status_code = 500
+                                data = {"error": f"Failed to open: {e}"}
+                        else:
+                            status_code = 404
+                            data = {"error": "Markdown file not found"}
+                    else:
+                        status_code = 404
+                        data = {"error": "Note or PDF path not found"}
+                else:
+                    status_code = 400
+                    data = {"error": "Invalid path"}
+
+            elif path.startswith("/api/papers/") and path.endswith("/open-markdown"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4:
+                    paper_id = parts[2]
+                    with store.db.get_connection() as conn:
+                        cur = conn.execute("SELECT pdf_path FROM papers WHERE id = ?", (paper_id,))
+                        row = cur.fetchone()
+                        if row and row["pdf_path"]:
+                            md_path = get_markdown_path(row["pdf_path"])
+                            if md_path and md_path.exists():
+                                try:
+                                    import os
+                                    if os.name == 'nt':
+                                        os.startfile(md_path)
+                                    else:
+                                        import subprocess
+                                        import sys
+                                        opener = "open" if sys.platform == "darwin" else "xdg-open"
+                                        subprocess.call([opener, str(md_path)])
+                                    data = {"status": "success"}
+                                except Exception as e:
+                                    status_code = 500
+                                    data = {"error": f"Failed to open: {e}"}
+                            else:
+                                status_code = 404
+                                data = {"error": "Markdown file not found"}
+                        else:
+                            status_code = 404
+                            data = {"error": "Paper or PDF path not found"}
+                else:
+                    status_code = 400
+                    data = {"error": "Invalid path"}
+            
             elif path.startswith("/api/qa/history/") and path.endswith("/delete"):
+
                 parts = path.strip("/").split("/")
                 if len(parts) == 5:
                     try:
