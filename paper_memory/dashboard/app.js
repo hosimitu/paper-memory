@@ -412,6 +412,10 @@ class App {
         } else {
             doiArea.innerHTML = '';
         }
+        
+        if (note.has_markdown) {
+            doiArea.innerHTML += ` <span style="margin: 0 8px;">|</span> <a href="${note.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
+        }
 
         document.getElementById('modal-content-full').innerText = i18n.getTranslatedString(note.content);
 
@@ -469,6 +473,10 @@ class App {
 
         papers.forEach((paper, index) => {
             const doiLink = paper.doi ? `<a href="https://doi.org/${paper.doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${paper.doi}</a>` : '-';
+            let mdLink = '';
+            if (paper.has_markdown && paper.id) {
+                mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
+            }
             const card = document.createElement('div');
             card.className = 'dashboard-section paper-card';
             card.innerHTML = `
@@ -476,7 +484,7 @@ class App {
                 <div class="paper-meta">
                     <p>${i18n.t('modal.authors') || 'Authors'}: ${getAuthorsList(paper.authors).join(', ')}</p>
                     <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
-                    <p>DOI: ${doiLink}</p>
+                    <p>DOI: ${doiLink}${mdLink}</p>
                 </div>
             `;
             list.appendChild(card);
