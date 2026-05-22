@@ -401,7 +401,16 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     }
                     
                     # 履歴に保存
-                    store.add_qa_history(query_text, answer_text, references, threshold, search_method=search_method)
+                    store.add_qa_history(
+                        query_text,
+                        answer_text,
+                        references,
+                        threshold,
+                        search_method=search_method,
+                        link_depth=link_depth,
+                        expand_paper=expand_paper,
+                        n=n_results
+                    )
 
             elif path.startswith("/api/references/") and path.endswith("/status"):
                 parts = path.strip("/").split("/")

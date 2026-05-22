@@ -839,6 +839,9 @@ class App {
 
             itemsToShow.forEach(item => {
                 const date = new Date(item.timestamp).toLocaleString('ja-JP');
+                const linkDepthText = item.link_depth !== undefined ? i18n.t(`search.link_depth.${item.link_depth}`) : i18n.t('search.link_depth.1');
+                const expandPaperText = item.expand_paper !== undefined ? (item.expand_paper ? (i18n.currentLang() === 'ja' ? '有効' : 'Yes') : (i18n.currentLang() === 'ja' ? '無効' : 'No')) : (i18n.currentLang() === 'ja' ? '無効' : 'No');
+
                 const div = document.createElement('div');
                 div.className = 'qa-history-item';
                 div.innerHTML = `
@@ -857,7 +860,11 @@ class App {
                         <span>|</span>
                         <span>${i18n.t('search.threshold').split('(')[0].trim()}: ${item.threshold}</span>
                         <span>|</span>
-                        <span>${item.references.length}${i18n.currentLang() === 'ja' ? '件' : ''} of references</span>
+                        <span>${i18n.t('search.link_depth')}: ${linkDepthText}</span>
+                        <span>|</span>
+                        <span>${i18n.t('search.expand_paper')}: ${expandPaperText}</span>
+                        <span>|</span>
+                        <span>${item.references.length}${i18n.currentLang() === 'ja' ? '件の参照' : ' references'}</span>
                         ${this.getMethodBadgeHtml(item.search_method)}
                     </div>
                 `;
@@ -878,6 +885,16 @@ class App {
                     document.getElementById('qa-input').value = item.query;
                     document.getElementById('qa-threshold-slider').value = item.threshold;
                     document.getElementById('qa-threshold-display').innerText = item.threshold;
+                    if (item.n !== undefined) {
+                        document.getElementById('qa-n-results-slider').value = item.n;
+                        document.getElementById('qa-n-results-display').innerText = item.n;
+                    }
+                    if (item.link_depth !== undefined) {
+                        document.getElementById('qa-link-depth-select').value = item.link_depth;
+                    }
+                    if (item.expand_paper !== undefined) {
+                        document.getElementById('qa-expand-paper-toggle').checked = item.expand_paper;
+                    }
                     resultsArea.scrollIntoView({ behavior: 'smooth' });
                 };
                 listArea.appendChild(div);

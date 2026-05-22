@@ -348,20 +348,23 @@ class NoteStore:
     # QA履歴管理
     # ========================================
 
-    def add_qa_history(self, query: str, answer: str, references: list, threshold: float, search_method: str = "vector") -> None:
+    def add_qa_history(self, query: str, answer: str, references: list, threshold: float, search_method: str = "vector", link_depth: int = 1, expand_paper: bool = False, n: int = 15) -> None:
         """QAのやり取りを履歴に保存し、10件を超えたら古いものを削除する"""
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-            INSERT INTO qa_history (query, answer, references_json, threshold, timestamp, search_method)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO qa_history (query, answer, references_json, threshold, timestamp, search_method, link_depth, expand_paper, n)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 query,
                 answer,
                 json.dumps(references, ensure_ascii=False),
                 threshold,
                 datetime.now().isoformat(),
-                search_method
+                search_method,
+                link_depth,
+                1 if expand_paper else 0,
+                n
             ))
             
             conn.commit()
@@ -382,7 +385,10 @@ class NoteStore:
                     "references": json.loads(row["references_json"]) if row["references_json"] else [],
                     "threshold": row["threshold"],
                     "timestamp": row["timestamp"],
-                    "search_method": row["search_method"] if "search_method" in row.keys() else "vector"
+                    "search_method": row["search_method"] if "search_method" in row.keys() else "vector",
+                    "link_depth": row["link_depth"] if "link_depth" in row.keys() else 1,
+                    "expand_paper": bool(row["expand_paper"]) if "expand_paper" in row.keys() else False,
+                    "n": row["n"] if "n" in row.keys() else 15
                 })
             return history
 
