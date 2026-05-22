@@ -414,7 +414,7 @@ class App {
         }
         
         if (note.has_markdown) {
-            doiArea.innerHTML += ` <span style="margin: 0 8px;">|</span> <a href="#" onclick="event.preventDefault(); fetch('/api/notes/${note.id}/open-markdown', {method: 'POST'}).then(r => r.json()).then(data => { if(data.error) alert(data.error); })" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
+            doiArea.innerHTML += ` <span style="margin: 0 8px;">|</span> <a href="${note.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
         }
 
         document.getElementById('modal-content-full').innerText = i18n.getTranslatedString(note.content);
@@ -475,7 +475,7 @@ class App {
             const doiLink = paper.doi ? `<a href="https://doi.org/${paper.doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${paper.doi}</a>` : '-';
             let mdLink = '';
             if (paper.has_markdown && paper.id) {
-                mdLink = ` <span style="margin: 0 8px;">|</span> <a href="#" onclick="event.preventDefault(); fetch('/api/papers/${paper.id}/open-markdown', {method: 'POST'}).then(r => r.json()).then(data => { if(data.error) alert(data.error); })" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
+                mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
             }
             const card = document.createElement('div');
             card.className = 'dashboard-section paper-card';
