@@ -528,7 +528,6 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         md_path = get_markdown_path(note.source_paper.pdf_path, getattr(note.source_paper, "title", ""))
                         if md_path and md_path.exists():
                             try:
-                                import os
                                 if os.name == 'nt':
                                     os.startfile(md_path)
                                 else:
@@ -561,7 +560,6 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                             md_path = get_markdown_path(row["pdf_path"], row["title"])
                             if md_path and md_path.exists():
                                 try:
-                                    import os
                                     if os.name == 'nt':
                                         os.startfile(md_path)
                                     else:
