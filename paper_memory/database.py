@@ -131,7 +131,10 @@ class Database:
                 references_json TEXT,
                 threshold REAL,
                 timestamp TEXT NOT NULL,
-                search_method TEXT DEFAULT 'vector'
+                search_method TEXT DEFAULT 'vector',
+                link_depth INTEGER DEFAULT 1,
+                expand_paper INTEGER DEFAULT 0,
+                n INTEGER DEFAULT 15
             )
             """)
 
@@ -140,6 +143,12 @@ class Database:
             columns = [column['name'] for column in cursor.fetchall()]
             if 'search_method' not in columns:
                 conn.execute("ALTER TABLE qa_history ADD COLUMN search_method TEXT DEFAULT 'vector'")
+            if 'link_depth' not in columns:
+                conn.execute("ALTER TABLE qa_history ADD COLUMN link_depth INTEGER DEFAULT 1")
+            if 'expand_paper' not in columns:
+                conn.execute("ALTER TABLE qa_history ADD COLUMN expand_paper INTEGER DEFAULT 0")
+            if 'n' not in columns:
+                conn.execute("ALTER TABLE qa_history ADD COLUMN n INTEGER DEFAULT 15")
 
             conn.commit()
 

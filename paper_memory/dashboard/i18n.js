@@ -81,6 +81,9 @@ const i18nDict = {
         "qa.result.ref_notes": "Referenced Knowledge Notes",
         "qa.result.show_detail": "Show Details",
         "qa.generating": "Generating answer... (Searching notes with threshold {threshold})",
+        "qa.expand_paper.on": "Yes",
+        "qa.expand_paper.off": "No",
+        "qa.history.n_results": "Retrieved:",
 
         "status.connected": "Connected",
         "status.disconnected": "Disconnected",
@@ -178,6 +181,9 @@ const i18nDict = {
         "qa.result.ref_notes": "参照された知識ノート",
         "qa.result.show_detail": "詳細を表示",
         "qa.generating": "回答生成中...（閾値 {threshold} でノートを検索中）",
+        "qa.expand_paper.on": "有効",
+        "qa.expand_paper.off": "無効",
+        "qa.history.n_results": "取得件数:",
 
         "status.connected": "接続済み",
         "status.disconnected": "切断",

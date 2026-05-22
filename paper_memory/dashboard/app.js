@@ -412,6 +412,10 @@ class App {
         } else {
             doiArea.innerHTML = '';
         }
+        
+        if (note.has_markdown) {
+            doiArea.innerHTML += ` <span style="margin: 0 8px;">|</span> <a href="${note.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
+        }
 
         document.getElementById('modal-content-full').innerText = i18n.getTranslatedString(note.content);
 
@@ -469,6 +473,10 @@ class App {
 
         papers.forEach((paper, index) => {
             const doiLink = paper.doi ? `<a href="https://doi.org/${paper.doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${paper.doi}</a>` : '-';
+            let mdLink = '';
+            if (paper.has_markdown && paper.id) {
+                mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
+            }
             const card = document.createElement('div');
             card.className = 'dashboard-section paper-card';
             card.innerHTML = `
@@ -476,7 +484,7 @@ class App {
                 <div class="paper-meta">
                     <p>${i18n.t('modal.authors') || 'Authors'}: ${getAuthorsList(paper.authors).join(', ')}</p>
                     <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
-                    <p>DOI: ${doiLink}</p>
+                    <p>DOI: ${doiLink}${mdLink}</p>
                 </div>
             `;
             list.appendChild(card);
@@ -839,6 +847,11 @@ class App {
 
             itemsToShow.forEach(item => {
                 const date = new Date(item.timestamp).toLocaleString('ja-JP');
+                const linkDepthText = item.link_depth !== undefined ? i18n.t(`search.link_depth.${item.link_depth}`) : i18n.t('search.link_depth.1');
+                const expandPaperText = item.expand_paper
+                    ? i18n.t('qa.expand_paper.on')
+                    : i18n.t('qa.expand_paper.off');
+
                 const div = document.createElement('div');
                 div.className = 'qa-history-item';
                 div.innerHTML = `
@@ -857,7 +870,13 @@ class App {
                         <span>|</span>
                         <span>${i18n.t('search.threshold').split('(')[0].trim()}: ${item.threshold}</span>
                         <span>|</span>
-                        <span>${item.references.length}${i18n.currentLang() === 'ja' ? '件' : ''} of references</span>
+                        <span>${i18n.t('search.link_depth')}: ${linkDepthText}</span>
+                        <span>|</span>
+                        <span>${i18n.t('search.expand_paper')}: ${expandPaperText}</span>
+                        <span>|</span>
+                        <span>${i18n.t('qa.history.n_results')} ${item.n !== undefined ? item.n : 15}</span>
+                        <span>|</span>
+                        <span>${item.references.length}${i18n.currentLang() === 'ja' ? '件の参照' : ' references'}</span>
                         ${this.getMethodBadgeHtml(item.search_method)}
                     </div>
                 `;
@@ -878,6 +897,16 @@ class App {
                     document.getElementById('qa-input').value = item.query;
                     document.getElementById('qa-threshold-slider').value = item.threshold;
                     document.getElementById('qa-threshold-display').innerText = item.threshold;
+                    if (item.n !== undefined) {
+                        document.getElementById('qa-n-results-slider').value = item.n;
+                        document.getElementById('qa-n-results-display').innerText = item.n;
+                    }
+                    if (item.link_depth !== undefined) {
+                        document.getElementById('qa-link-depth-select').value = item.link_depth;
+                    }
+                    if (item.expand_paper !== undefined) {
+                        document.getElementById('qa-expand-paper-toggle').checked = item.expand_paper;
+                    }
                     resultsArea.scrollIntoView({ behavior: 'smooth' });
                 };
                 listArea.appendChild(div);
