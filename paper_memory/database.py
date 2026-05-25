@@ -222,6 +222,8 @@ class Database:
                 conn.execute("ALTER TABLE qa_history ADD COLUMN expand_paper INTEGER DEFAULT 0")
             if 'n' not in columns:
                 conn.execute("ALTER TABLE qa_history ADD COLUMN n INTEGER DEFAULT 15")
+            if 'rewritten_query' not in columns:
+                conn.execute("ALTER TABLE qa_history ADD COLUMN rewritten_query TEXT")
 
             self._normalize_existing_reason_data(conn)
             conn.commit()

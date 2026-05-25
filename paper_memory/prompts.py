@@ -46,7 +46,8 @@ def get_search_rewrite_prompt(query: str) -> str:
         "Given a user query, generate 3 to 5 concise search queries that are likely to match note content. "
         "Prefer explicit technical terms, acronyms, and full-name expansions when they are implied by the query. "
         "Do not invent facts that are not present in the query. "
-        "Output only a JSON array of strings.\n\n"
+        "Return ONLY a JSON array of strings. Do not include any reasoning, explanation, markdown, code fences, or extra text. "
+        "The output must be valid JSON and must contain only the rewritten queries.\n\n"
         f"User query: {query}"
     )
 

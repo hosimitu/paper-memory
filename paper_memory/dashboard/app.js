@@ -741,6 +741,13 @@ class App {
                                 <span>${i18n.t('search.expand_paper')}</span>
                             </label>
                         </div>
+                        <div class="threshold-control">
+                            <label for="qa-query-mode-select">${i18n.t('qa.rewrite_mode')}</label>
+                            <select id="qa-query-mode-select" class="graph-select">
+                                <option value="ai" selected>${i18n.t('qa.rewrite_mode.ai')}</option>
+                                <option value="raw">${i18n.t('qa.rewrite_mode.raw')}</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div id="qa-results" style="margin-top: 24px;"></div>
@@ -767,6 +774,7 @@ class App {
         const qaNResultsDisplay = document.getElementById('qa-n-results-display');
         const qaLinkDepthSelect = document.getElementById('qa-link-depth-select');
         const qaExpandPaperToggle = document.getElementById('qa-expand-paper-toggle');
+        const qaQueryModeSelect = document.getElementById('qa-query-mode-select');
 
         qaThresholdSlider.addEventListener('input', (e) => {
             qaThresholdDisplay.innerText = e.target.value;
@@ -780,6 +788,7 @@ class App {
             n: parseInt(qaNResultsSlider.value),
             linkDepth: parseInt(qaLinkDepthSelect.value),
             expandPaper: qaExpandPaperToggle.checked,
+            useAiRewrite: qaQueryModeSelect.value === 'ai',
         });
 
         const triggerQA = () => {
@@ -856,6 +865,8 @@ class App {
                 const expandPaperText = item.expand_paper
                     ? i18n.t('qa.expand_paper.on')
                     : i18n.t('qa.expand_paper.off');
+                const rewrittenQueries = Array.isArray(item.rewritten_queries) ? item.rewritten_queries.filter(Boolean) : [];
+                const rewrittenSummary = rewrittenQueries.length > 0 ? rewrittenQueries.join(' • ') : i18n.t('qa.result.no_rewritten');
 
                 const div = document.createElement('div');
                 div.className = 'qa-history-item';
@@ -870,6 +881,10 @@ class App {
                         </button>
                     </div>
                     <div class="qa-history-answer">${item.answer}</div>
+                    <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.9rem; flex-wrap: wrap;">
+                        <i data-lucide="sparkles" style="width:16px;"></i>
+                        <span>${i18n.t('qa.result.rewritten_query')}: ${rewrittenSummary}</span>
+                    </div>
                     <div class="qa-history-meta" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                         <span>${date}</span>
                         <span>|</span>
@@ -898,7 +913,7 @@ class App {
                 div.onclick = () => {
                     // 履歴をクリックしたら結果エリアに再表示
                     const resultsArea = document.getElementById('qa-results');
-                    this.displayQAResult(item.query, item.answer, item.references, resultsArea, item.search_method);
+                    this.displayQAResult(item.query, item.answer, item.references, resultsArea, item.search_method, null, rewrittenQueries);
                     document.getElementById('qa-input').value = item.query;
                     document.getElementById('qa-threshold-slider').value = item.threshold;
                     document.getElementById('qa-threshold-display').innerText = item.threshold;
@@ -934,7 +949,7 @@ class App {
         }
     }
 
-    displayQAResult(query, answer, references, resultsArea, searchMethod = 'vector', graphStats = null) {
+    displayQAResult(query, answer, references, resultsArea, searchMethod = 'vector', graphStats = null, rewrittenQueries = []) {
         const dedentedAnswer = (str) => {
             const lines = str.split('\n');
             const firstNonEmptyLine = lines.find(l => l.trim().length > 0);
@@ -944,6 +959,9 @@ class App {
             const indent = match[1];
             return lines.map(l => l.startsWith(indent) ? l.slice(indent.length) : l).join('\n').trim();
         };
+
+        const rewrittenList = Array.isArray(rewrittenQueries) ? rewrittenQueries.filter(Boolean) : [];
+        const rewrittenSummary = rewrittenList.length > 0 ? rewrittenList.join(' • ') : i18n.t('qa.result.no_rewritten');
 
         let statsHtml = '';
         if (graphStats && (graphStats.linked_notes > 0 || graphStats.paper_expanded > 0)) {
@@ -957,12 +975,18 @@ class App {
         }
 
         resultsArea.innerHTML = `
-                <div style="font-weight: 700; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i data-lucide="help-circle"></i> ${i18n.t('qa.result.query')}: ${query}
+                <div style="font-weight: 700; color: var(--accent); margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="help-circle"></i> ${i18n.t('qa.result.query')}: ${query}
+                        </div>
+                        ${this.getMethodBadgeHtml(searchMethod)}
+                        ${statsHtml}
                     </div>
-                    ${this.getMethodBadgeHtml(searchMethod)}
-                    ${statsHtml}
+                    <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.9rem; flex-wrap: wrap;">
+                        <i data-lucide="sparkles" style="width: 16px;"></i>
+                        <span>${i18n.t('qa.result.rewritten_query')}: ${rewrittenSummary}</span>
+                    </div>
                 </div>
                 <div class="modal-text-block markdown-content" style="font-size: 1.05rem; line-height: 1.8; color: var(--text-primary); margin-bottom: 24px;">
                     ${marked.parse(dedentedAnswer(answer))}
@@ -996,6 +1020,7 @@ class App {
         const n = params.n || 15;
         const linkDepth = params.linkDepth !== undefined ? params.linkDepth : 1;
         const expandPaper = params.expandPaper || false;
+        const useAiRewrite = params.useAiRewrite !== undefined ? params.useAiRewrite : true;
 
         resultsArea.innerHTML = `
             <div class="loader-container" style="display:flex; flex-direction:column; gap:12px; align-items:center;">
@@ -1007,7 +1032,7 @@ class App {
             const res = await fetch(API_BASE + '/qa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, threshold, n, link_depth: linkDepth, expand_paper: expandPaper, lang: i18n.currentLang() })
+                body: JSON.stringify({ query, threshold, n, link_depth: linkDepth, expand_paper: expandPaper, use_ai_rewrite: useAiRewrite, lang: i18n.currentLang() })
             });
 
             const data = await res.json();
@@ -1024,7 +1049,7 @@ class App {
             }
 
             if (data.answer) {
-                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method, data.graph_stats);
+                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method, data.graph_stats, data.rewritten_queries || []);
                 this.loadQAHistory(); // 履歴を更新
             } else {
                 resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: 'No answer returned' })}</div>`;

@@ -314,7 +314,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     "threshold": threshold,
                     "n": n,
                     "link_depth": link_depth,
-                    "expand_paper": expand_paper
+                    "expand_paper": expand_paper,
+                    "rewritten_queries": search_data.get("rewritten_queries", []),
                 }
             elif path == "/api/qa/history":
                 limit = int(query.get("limit", [10])[0])
@@ -450,6 +451,11 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     n_results = post_data.get("n", 15)
                     link_depth = post_data.get("link_depth", 1)
                     expand_paper = post_data.get("expand_paper", False)
+                    use_ai_rewrite = post_data.get("use_ai_rewrite", True)
+                    if isinstance(use_ai_rewrite, str):
+                        use_ai_rewrite = use_ai_rewrite.lower() == "true"
+                    else:
+                        use_ai_rewrite = bool(use_ai_rewrite)
                     
                     search_data = store.search_with_graph(
                         query_text,
@@ -457,6 +463,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         link_depth=link_depth,
                         expand_paper=expand_paper,
                         distance_threshold=threshold,
+                        use_ai_rewrite=use_ai_rewrite,
                     )
                     search_results = search_data["results"]
                     search_method = search_data["method"]
@@ -552,6 +559,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         "references": references,
                         "search_method": search_method,
                         "graph_stats": graph_stats,
+                        "rewritten_queries": search_data.get("rewritten_queries", []),
                         "api_usage": {
                             "used": update_api_usage(),
                             "limit": API_LIMIT_RPM
@@ -567,7 +575,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         search_method=search_method,
                         link_depth=link_depth,
                         expand_paper=expand_paper,
-                        n=n_results
+                        n=n_results,
+                        rewritten_queries=search_data.get("rewritten_queries", []),
                     )
 
             elif path.startswith("/api/references/") and path.endswith("/status"):
