@@ -95,10 +95,12 @@ FILE: scratch/new_notes.json
 ```
 
 **[CRITICAL BILINGUAL REQUIREMENT]** For fields defined as bilingual dictionaries (such as `content`, `context`, `keywords`, `reason`), produce both `"en"` and `"local"` keys.
-- Determining `local` language: Read the `local_language` setting from `.env` (e.g., `local_language=ja` for Japanese). If `.env` does not specify a value, default to `en`.
+- Determining `local` language: Do **not** use `get-content` or equivalent file reads on `.env` because it may contain secrets such as `GEMINI_API_KEY`.
+- Prefer the `PAPER_MEMORY_LANGUAGE` environment variable if it is already set. If it is not set, default to `en`.
+- If a runtime setting file is needed, use a non-secret config file and never store API keys there.
 - Use the literal key name `local`; do not use ISO codes.
 - `en`: Always produce English text.
-- `local`: Produce text in the language specified by `.env` setting.
+- `local`: Produce text in the language specified by `PAPER_MEMORY_LANGUAGE` or `en` by default.
 
 ### Quality Standards
 

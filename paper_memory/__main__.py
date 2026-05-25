@@ -806,14 +806,23 @@ def cmd_refs_add(args, ref_store: ReferenceStore, note_store: NoteStore) -> None
     from .doi_fetcher import fetch_doi_by_title_and_authors
 
     for item in data:
+        if not isinstance(item, dict):
+            print("⚠️ 空の参考文献エントリをスキップしました", file=sys.stderr)
+            continue
+
         title = item.get("title", "")
         # title が多言語辞書型 ({"en": "...", "local": "..."}) の場合は文字列に正規化する
         if isinstance(title, dict):
             title = title.get("en") or title.get("local") or next(iter(title.values()), "")
             item["title"] = title  # item 内も上書きしておく
-        doi = item.get("doi", "")
+        title = str(title).strip() if title else ""
+        doi = str(item.get("doi", "") or "").strip()
         authors = item.get("authors", [])
         year = item.get("year", None)
+
+        if not (title or doi):
+            print("⚠️ タイトルもDOIもない参考文献エントリをスキップしました", file=sys.stderr)
+            continue
 
         if title and not doi:
             print(f"🔍 APIからDOIを検索中: {title}", file=sys.stderr)
