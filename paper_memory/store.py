@@ -359,13 +359,13 @@ class NoteStore:
     # QA履歴管理
     # ========================================
 
-    def add_qa_history(self, query: str, answer: str, references: list, threshold: float, search_method: str = "vector", link_depth: int = 1, expand_paper: bool = False, n: int = 15) -> None:
+    def add_qa_history(self, query: str, answer: str, references: list, threshold: float, search_method: str = "vector", link_depth: int = 1, expand_paper: bool = False, n: int = 15, rewritten_queries: Optional[list[str]] = None) -> None:
         """QAのやり取りを履歴に保存し、10件を超えたら古いものを削除する"""
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-            INSERT INTO qa_history (query, answer, references_json, threshold, timestamp, search_method, link_depth, expand_paper, n)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO qa_history (query, answer, references_json, threshold, timestamp, search_method, link_depth, expand_paper, n, rewritten_query)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 query,
                 answer,
@@ -375,7 +375,8 @@ class NoteStore:
                 search_method,
                 link_depth,
                 1 if expand_paper else 0,
-                n
+                n,
+                json.dumps(rewritten_queries or [], ensure_ascii=False),
             ))
             
             conn.commit()
@@ -389,6 +390,18 @@ class NoteStore:
             
             history = []
             for row in rows:
+                rewritten_query_value = row["rewritten_query"] if "rewritten_query" in row.keys() else None
+                rewritten_queries = []
+                if rewritten_query_value:
+                    try:
+                        parsed = json.loads(rewritten_query_value)
+                        if isinstance(parsed, list):
+                            rewritten_queries = [str(q).strip() for q in parsed if str(q).strip()]
+                        else:
+                            rewritten_queries = [str(rewritten_query_value).strip()] if str(rewritten_query_value).strip() else []
+                    except Exception:
+                        rewritten_queries = [str(rewritten_query_value).strip()] if str(rewritten_query_value).strip() else []
+
                 history.append({
                     "id": row["id"],
                     "query": row["query"],
@@ -399,7 +412,8 @@ class NoteStore:
                     "search_method": row["search_method"] if "search_method" in row.keys() else "vector",
                     "link_depth": row["link_depth"] if "link_depth" in row.keys() else 1,
                     "expand_paper": bool(row["expand_paper"]) if "expand_paper" in row.keys() else False,
-                    "n": row["n"] if "n" in row.keys() else 15
+                    "n": row["n"] if "n" in row.keys() else 15,
+                    "rewritten_queries": rewritten_queries,
                 })
             return history
 
@@ -427,6 +441,13 @@ class NoteStore:
 
         cleaned = cleaned.replace("```json", "").replace("```", "").strip()
 
+        def _normalize_candidates(parsed):
+            if isinstance(parsed, list):
+                return [str(q).strip() for q in parsed if str(q).strip()]
+            if isinstance(parsed, str) and parsed.strip():
+                return [parsed.strip()]
+            return []
+
         parsed = None
         for loader in (json.loads, ast.literal_eval):
             try:
@@ -435,10 +456,26 @@ class NoteStore:
             except Exception:
                 parsed = None
 
-        if isinstance(parsed, list):
-            return [str(q).strip() for q in parsed if str(q).strip()]
-        if isinstance(parsed, str) and parsed.strip():
-            return [parsed.strip()]
+        normalized = _normalize_candidates(parsed)
+        if normalized:
+            return normalized
+
+        bracket_candidates = []
+        for match in re.finditer(r'\[[\s\S]*?\]', cleaned):
+            candidate_text = match.group(0)
+            try:
+                parsed_candidate = json.loads(candidate_text)
+            except Exception:
+                try:
+                    parsed_candidate = ast.literal_eval(candidate_text)
+                except Exception:
+                    continue
+            normalized_candidate = _normalize_candidates(parsed_candidate)
+            if normalized_candidate:
+                bracket_candidates.append(normalized_candidate)
+
+        if bracket_candidates:
+            return bracket_candidates[0]
 
         candidates = []
         for token in re.split(r'[\n,;]+', cleaned):
@@ -508,7 +545,15 @@ class NoteStore:
         collected.sort(key=lambda item: item["distance"] if item["distance"] is not None else 1.0)
         return collected[:n_results]
 
-    def search(self, query: str, n_results: int = 10, element_type_filter: Optional[str] = None, distance_threshold: Optional[float] = None) -> dict:
+    def search(
+        self,
+        query: str,
+        n_results: int = 10,
+        element_type_filter: Optional[str] = None,
+        distance_threshold: Optional[float] = None,
+        rewritten_queries: Optional[list[str]] = None,
+        use_ai_rewrite: bool = True,
+    ) -> dict:
         """
         セマンティック検索
         
@@ -517,16 +562,21 @@ class NoteStore:
             n_results: 最大取得件数（デフォルト: 10）
             element_type_filter: 要素タイプによるフィルタ
             distance_threshold: 距離の閾値（指定された場合、閾値以下のものを最大 n_results 件返します）
+            use_ai_rewrite: AIによるクエリ変換を利用するか
         
         Returns:
-            dict: {"results": list[dict], "method": "vector" | "keyword"}
+            dict: {"results": list[dict], "method": "vector" | "keyword", "rewritten_queries": list[str]}
         """
         collection = self._get_chroma_collection()
+        if rewritten_queries is None:
+            rewritten_queries = self._rewrite_ambiguous_query(query) if use_ai_rewrite else []
+        elif not use_ai_rewrite:
+            rewritten_queries = []
+
         if collection is None:
-            return {"results": self._keyword_search(query, n_results), "method": "keyword"}
+            return {"results": self._keyword_search(query, n_results), "method": "keyword", "rewritten_queries": rewritten_queries}
 
         query_candidates = [query]
-        rewritten_queries = self._rewrite_ambiguous_query(query)
         if rewritten_queries:
             query_candidates = list(dict.fromkeys([query, *rewritten_queries]))
 
@@ -540,13 +590,13 @@ class NoteStore:
             )
         except Exception as e:
             print(f"⚠️ ChromaDB検索エラー: {e}", file=sys.stderr)
-            return {"results": self._keyword_search(query, n_results), "method": "keyword"}
+            return {"results": self._keyword_search(query, n_results), "method": "keyword", "rewritten_queries": rewritten_queries}
 
         if not output:
             print(f"ℹ️ セマンティック検索でヒットしなかったため、キーワード検索に切り替えます: {query}", file=sys.stderr)
-            return {"results": self._keyword_search(query, n_results), "method": "keyword"}
+            return {"results": self._keyword_search(query, n_results), "method": "keyword", "rewritten_queries": rewritten_queries}
 
-        return {"results": output, "method": "vector"}
+        return {"results": output, "method": "vector", "rewritten_queries": rewritten_queries}
 
     def search_with_graph(
         self,
@@ -557,6 +607,7 @@ class NoteStore:
         distance_threshold: Optional[float] = None,
         element_type_filter: Optional[str] = None,
         max_total: int = 100,
+        use_ai_rewrite: bool = True,
     ) -> dict:
         """
         グラフ探索付きセマンティック検索
@@ -586,6 +637,7 @@ class NoteStore:
                 query, n_results,
                 element_type_filter=element_type_filter,
                 distance_threshold=distance_threshold,
+                use_ai_rewrite=use_ai_rewrite,
             )
             # 従来の結果に source/depth フィールドを付与して統一フォーマットに
             for r in base_results["results"]:
@@ -603,7 +655,9 @@ class NoteStore:
             query, n_results,
             element_type_filter=element_type_filter,
             distance_threshold=distance_threshold,
+            use_ai_rewrite=use_ai_rewrite,
         )
+        rewritten_queries = base_results.get("rewritten_queries", [])
         method = base_results["method"]
 
         # 統合結果: note_id -> result_dict のマッピング（重複排除用）
@@ -702,6 +756,7 @@ class NoteStore:
         return {
             "results": output,
             "method": method,
+            "rewritten_queries": rewritten_queries,
             "graph_stats": {
                 "direct_hits": direct_count,
                 "linked_notes": linked_count,
