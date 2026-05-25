@@ -580,6 +580,11 @@ class NoteStore:
         if rewritten_queries:
             query_candidates = list(dict.fromkeys([query, *rewritten_queries]))
 
+        query_candidates = [query]
+        rewritten_queries = self._rewrite_ambiguous_query(query)
+        if rewritten_queries:
+            query_candidates = list(dict.fromkeys([query, *rewritten_queries]))
+
         try:
             output = self._collect_vector_results(
                 collection,
