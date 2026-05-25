@@ -75,6 +75,101 @@ def update_api_usage():
     API_USAGE_LOG = [t for t in API_USAGE_LOG if t > one_minute_ago]
     return len(API_USAGE_LOG)
 
+
+def _flatten_link_reason(link_reason):
+    if isinstance(link_reason, dict):
+        return link_reason.get("en") or link_reason.get("local") or next(iter(link_reason.values()), "")
+    if link_reason is None:
+        return ""
+    return str(link_reason)
+
+
+def _format_qa_note_value(value):
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def build_qa_context_payload(search_results, query_text, search_method, link_depth, expand_paper):
+    citation_map = {}
+    paper_to_citations = {}
+
+    for idx, res in enumerate(search_results):
+        note = res["note"]
+        citation_id = idx + 1
+        citation_map[note["id"]] = citation_id
+        paper_title = note["source_paper"].get("title", "Unknown Paper")
+        paper_to_citations.setdefault(paper_title, []).append(citation_id)
+
+    nodes = []
+    edges = []
+
+    for idx, res in enumerate(search_results):
+        note = res["note"]
+        citation_id = idx + 1
+        source_type = res.get("source", "direct")
+        depth = res.get("depth", 0)
+        linked_from_citation = None
+        link_reason = _flatten_link_reason(res.get("link_reason"))
+
+        if source_type == "linked":
+            linked_from_citation = citation_map.get(res.get("linked_from"))
+
+        same_paper_sources = []
+        paper_title = note["source_paper"].get("title", "Unknown Paper")
+        if source_type == "paper_expand":
+            same_paper_sources = [cid for cid in paper_to_citations.get(paper_title, []) if cid != citation_id]
+
+        nodes.append(
+            {
+                "citation_id": citation_id,
+                "paper_title": paper_title,
+                "note_type": note.get("element_type", "other"),
+                "source_type": source_type,
+                "depth": depth,
+                "linked_from_citation_id": linked_from_citation,
+                "link_reason": link_reason,
+                "same_paper_sources": same_paper_sources,
+                "content": _format_qa_note_value(note.get("content", "")),
+                "context": _format_qa_note_value(note.get("context", "")),
+            }
+        )
+
+        if source_type == "linked" and linked_from_citation is not None:
+            edges.append(
+                {
+                    "from": linked_from_citation,
+                    "to": citation_id,
+                    "relation_type": "linked",
+                    "depth": depth,
+                    "reason": link_reason,
+                }
+            )
+
+        if source_type == "paper_expand":
+            for source_citation in same_paper_sources:
+                edges.append(
+                    {
+                        "from": source_citation,
+                        "to": citation_id,
+                        "relation_type": "same_paper",
+                        "depth": 0,
+                        "reason": "Same paper context expansion",
+                    }
+                )
+
+    return {
+        "metadata": {
+            "query": query_text,
+            "search_method": search_method,
+            "link_depth": link_depth,
+            "expand_paper": expand_paper,
+        },
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
 class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
     """
     Paper Memory ダッシュボード用の HTTP ハンドラ
@@ -383,33 +478,14 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         return
                     
                     # 2. プロンプト構築（リンク経由ノートの理由を注入）
-                    context_lines = []
                     references = []
                     for i, res in enumerate(search_results):
                         note = res["note"]
                         title = note["source_paper"]["title"]
-                        content = note["content"]
                         note_id = note["id"]
                         ref_num = i + 1
                         source = res.get("source", "direct")
-                        
-                        # ノートの出自に応じてコンテキストに注釈を追加
-                        annotation = ""
-                        if source == "linked":
-                            link_reason = res.get("link_reason", "")
-                            depth = res.get("depth", 1)
-                            # 多言語 reason の平坦化
-                            if isinstance(link_reason, dict):
-                                link_reason = link_reason.get("en") or link_reason.get("local") or next(iter(link_reason.values()), "")
-                            annotation = f"(Linked via {depth}-hop: {link_reason})" if link_reason else f"(Linked via {depth}-hop)"
-                        elif source == "paper_expand":
-                            annotation = "(Same paper context)"
-                        
-                        line = f"[{ref_num}] Paper: {title}\nNote content: {content}"
-                        if annotation:
-                            line += f"\n{annotation}"
-                        line += "\n"
-                        context_lines.append(line)
+
                         references.append({
                             "id": ref_num,
                             "title": title,
@@ -417,14 +493,19 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                             "source": source,
                             "depth": res.get("depth", 0),
                         })
-                        
-                    context_str = "\n".join(context_lines)
-                    
+
+                    qa_context = build_qa_context_payload(
+                        search_results,
+                        query_text,
+                        search_method,
+                        link_depth,
+                        expand_paper,
+                    )
+
                     from .prompts import get_qa_assistant_prompt
                     lang = post_data.get("lang", DEFAULT_LANGUAGE)
-                    prompt = get_qa_assistant_prompt(context_str, query_text, lang)
+                    prompt = get_qa_assistant_prompt(qa_context, query_text, lang)
 
-                    
                     # 3. LLM呼び出し
                     import warnings
                     with warnings.catch_warnings():

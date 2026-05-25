@@ -19,6 +19,7 @@
 ノートのCRUD操作、セマンティック検索、リンク管理を担当する。
 """
 
+import ast
 import json
 import os
 import sys
@@ -30,7 +31,8 @@ from typing import Optional, List, Dict, Any
 
 from .note import PaperNote, SourcePaper, normalize_reason
 from .database import Database
-from .ai_models import EMBEDDING_MODEL
+from .ai_models import EMBEDDING_MODEL, SEARCH_REWRITE_MODEL
+from .prompts import get_search_rewrite_prompt
 
 
 class NoteStore:
@@ -418,6 +420,94 @@ class NoteStore:
     # セマンティック検索（ChromaDB）
     # ========================================
 
+    def _parse_rewrite_candidates(self, raw_text: str) -> list[str]:
+        cleaned = raw_text.strip()
+        if not cleaned:
+            return []
+
+        cleaned = cleaned.replace("```json", "").replace("```", "").strip()
+
+        parsed = None
+        for loader in (json.loads, ast.literal_eval):
+            try:
+                parsed = loader(cleaned)
+                break
+            except Exception:
+                parsed = None
+
+        if isinstance(parsed, list):
+            return [str(q).strip() for q in parsed if str(q).strip()]
+        if isinstance(parsed, str) and parsed.strip():
+            return [parsed.strip()]
+
+        candidates = []
+        for token in re.split(r'[\n,;]+', cleaned):
+            token = token.strip()
+            if not token:
+                continue
+            token = re.sub(r'^[\-\*\d\.\)\s]+', '', token)
+            token = token.strip().strip('"').strip("'")
+            if token and token not in candidates:
+                candidates.append(token)
+
+        return candidates
+
+    def _rewrite_ambiguous_query(self, query: str) -> list[str]:
+        if not query:
+            return []
+
+        try:
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=FutureWarning)
+                import google.generativeai as genai
+
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                return []
+
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(SEARCH_REWRITE_MODEL)
+            response = model.generate_content(get_search_rewrite_prompt(query))
+            raw_text = response.text.strip()
+            return self._parse_rewrite_candidates(raw_text)
+        except Exception as e:
+            print(f"⚠️ クエリ補正に失敗しました: {e}", file=sys.stderr)
+            return []
+
+    def _collect_vector_results(self, collection, query_texts, n_results, element_type_filter, distance_threshold):
+        collected = []
+        seen_ids = set()
+
+        for query_text in query_texts:
+            query_params = {
+                "query_texts": [query_text],
+                "n_results": min(n_results, self.get_stats()["total_notes"] or 1),
+            }
+            if element_type_filter:
+                query_params["where"] = {"element_type": element_type_filter}
+
+            results = collection.query(**query_params)
+            if not results or not results.get("ids") or not results["ids"][0]:
+                continue
+
+            for i, note_id in enumerate(results["ids"][0]):
+                distance = results["distances"][0][i] if results.get("distances") else None
+                if distance_threshold is not None and distance is not None and distance > distance_threshold:
+                    continue
+                if note_id in seen_ids:
+                    continue
+                seen_ids.add(note_id)
+                note = self.get(note_id)
+                if note:
+                    collected.append({
+                        "note": note.to_dict(),
+                        "distance": distance,
+                    })
+
+        collected.sort(key=lambda item: item["distance"] if item["distance"] is not None else 1.0)
+        return collected[:n_results]
+
     def search(self, query: str, n_results: int = 10, element_type_filter: Optional[str] = None, distance_threshold: Optional[float] = None) -> dict:
         """
         セマンティック検索
@@ -435,37 +525,23 @@ class NoteStore:
         if collection is None:
             return {"results": self._keyword_search(query, n_results), "method": "keyword"}
 
+        query_candidates = [query]
+        rewritten_queries = self._rewrite_ambiguous_query(query)
+        if rewritten_queries:
+            query_candidates = list(dict.fromkeys([query, *rewritten_queries]))
+
         try:
-            query_params = {
-                "query_texts": [query],
-                "n_results": min(n_results, self.get_stats()["total_notes"] or 1),
-            }
-            if element_type_filter:
-                query_params["where"] = {"element_type": element_type_filter}
-            
-            results = collection.query(**query_params)
+            output = self._collect_vector_results(
+                collection,
+                query_candidates,
+                n_results,
+                element_type_filter,
+                distance_threshold,
+            )
         except Exception as e:
             print(f"⚠️ ChromaDB検索エラー: {e}", file=sys.stderr)
             return {"results": self._keyword_search(query, n_results), "method": "keyword"}
 
-        output = []
-        if results and results["ids"] and results["ids"][0]:
-            for i, note_id in enumerate(results["ids"][0]):
-                distance = results["distances"][0][i] if results["distances"] else None
-                
-                # 閾値チェック
-                if distance_threshold is not None and distance is not None:
-                    if distance > distance_threshold:
-                        continue
-                
-                note = self.get(note_id)
-                if note:
-                    output.append({
-                        "note": note.to_dict(),
-                        "distance": distance,
-                    })
-        
-        # 0件だった場合のフォールバック（ベクトル検索は成功したが結果がない、または閾値で消えた場合）
         if not output:
             print(f"ℹ️ セマンティック検索でヒットしなかったため、キーワード検索に切り替えます: {query}", file=sys.stderr)
             return {"results": self._keyword_search(query, n_results), "method": "keyword"}
