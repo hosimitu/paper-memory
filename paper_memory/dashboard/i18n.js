@@ -247,11 +247,15 @@ function getTranslatedString(val) {
     if (!val) return '';
     if (typeof val === 'string') return val;
     if (typeof val === 'object') {
-        let text = val[currentLang];
-        if (!text && currentLang !== 'en') {
-            text = val['local'];
+        const preferredLangs = [currentLang, 'local', 'ja', 'en'];
+        for (const lang of preferredLangs) {
+            if (!lang) continue;
+            const text = val[lang];
+            if (typeof text === 'string' && text.trim()) {
+                return text;
+            }
         }
-        return text || val['en'] || Object.values(val)[0] || '';
+        return Object.values(val).find(v => typeof v === 'string' && v.trim()) || '';
     }
     return String(val);
 }

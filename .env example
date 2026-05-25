@@ -2,5 +2,5 @@
 # Paste the key obtained from https://aistudio.google.com/app/apikey below,
 # and change the file name to ".env".
 
-GEMINI_API_KEY=""
 PAPER_MEMORY_LANGUAGE="ja"
+GEMINI_API_KEY=""

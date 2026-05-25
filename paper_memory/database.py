@@ -32,6 +32,79 @@ class Database:
     def __init__(self, db_path: str = "paper_memory.db"):
         self.db_path = Path(db_path)
 
+    @staticmethod
+    def _normalize_reason(reason):
+        if isinstance(reason, dict):
+            normalized = {}
+            if "en" in reason:
+                normalized["en"] = reason["en"]
+            if "local" in reason:
+                normalized["local"] = reason["local"]
+            elif "ja" in reason:
+                normalized["local"] = reason["ja"]
+            for key, value in reason.items():
+                if key in ("en", "local", "ja"):
+                    continue
+                normalized[key] = value
+            return normalized
+        return reason
+
+    def _normalize_existing_reason_data(self, conn) -> None:
+        notes = conn.execute("SELECT id, evolution_history FROM notes").fetchall()
+        for row in notes:
+            try:
+                history = json.loads(row["evolution_history"]) if row["evolution_history"] else []
+            except Exception:
+                continue
+
+            if not isinstance(history, list):
+                continue
+
+            normalized_history = []
+            changed = False
+            for event in history:
+                if not isinstance(event, dict):
+                    normalized_history.append(event)
+                    continue
+
+                normalized_event = dict(event)
+                if "reason" in normalized_event:
+                    normalized_reason = self._normalize_reason(normalized_event["reason"])
+                    if normalized_reason != normalized_event["reason"]:
+                        normalized_event["reason"] = normalized_reason
+                        changed = True
+                normalized_history.append(normalized_event)
+
+            if changed:
+                conn.execute(
+                    "UPDATE notes SET evolution_history = ? WHERE id = ?",
+                    (json.dumps(normalized_history, ensure_ascii=False), row["id"]),
+                )
+
+        link_rows = conn.execute("SELECT source_id, target_id, reason FROM note_links").fetchall()
+        for row in link_rows:
+            reason = row["reason"]
+            parsed_reason = reason
+            if isinstance(reason, str) and reason.strip().startswith(("{", "[")):
+                try:
+                    parsed_reason = json.loads(reason)
+                except Exception:
+                    parsed_reason = reason
+
+            normalized_reason = self._normalize_reason(parsed_reason)
+            if normalized_reason == parsed_reason:
+                continue
+
+            serialized_reason = (
+                json.dumps(normalized_reason, ensure_ascii=False)
+                if isinstance(normalized_reason, dict)
+                else normalized_reason
+            )
+            conn.execute(
+                "UPDATE note_links SET reason = ? WHERE source_id = ? AND target_id = ?",
+                (serialized_reason, row["source_id"], row["target_id"]),
+            )
+
     def get_connection(self) -> sqlite3.Connection:
         """SQLite 接続を取得（Dictのようにアクセスできる row_factory を設定）"""
         conn = sqlite3.connect(self.db_path)
@@ -150,6 +223,7 @@ class Database:
             if 'n' not in columns:
                 conn.execute("ALTER TABLE qa_history ADD COLUMN n INTEGER DEFAULT 15")
 
+            self._normalize_existing_reason_data(conn)
             conn.commit()
 
     def migrate_notes(self, notes_dir: Path, backup_dir: Path) -> int:

@@ -53,7 +53,12 @@ const getKeywordsList = (keywords) => {
     // オブジェクトの場合は言語別配列、または多言語文字列オブジェクトとして解決
     if (typeof keywords === 'object') {
         const lang = i18n.currentLang();
-        const kwList = keywords[lang] || keywords['en'] || keywords['local'] || Object.values(keywords)[0];
+        const kwList =
+            keywords[lang] ??
+            (lang !== 'en' ? (keywords['local'] ?? keywords['ja']) : undefined) ??
+            keywords['en'] ??
+            Object.values(keywords)[0];
+
         if (Array.isArray(kwList)) {
             return kwList.map(String).filter(Boolean);
         }

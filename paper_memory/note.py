@@ -27,6 +27,24 @@ from datetime import datetime
 from typing import Optional, Union
 
 
+def normalize_reason(reason):
+    """リンク理由の多言語キーを統一する。"""
+    if isinstance(reason, dict):
+        normalized = {}
+        if "en" in reason:
+            normalized["en"] = reason["en"]
+        if "local" in reason:
+            normalized["local"] = reason["local"]
+        elif "ja" in reason:
+            normalized["local"] = reason["ja"]
+        for key, value in reason.items():
+            if key in ("en", "local", "ja"):
+                continue
+            normalized[key] = value
+        return normalized
+    return reason
+
+
 # 論文要素タイプの定義
 ELEMENT_TYPES = [
     "background",   # 背景・先行研究
@@ -150,7 +168,7 @@ class PaperNote:
             self.evolution_history.append({
                 "action": "link_added",
                 "target_id": target_id,
-                "reason": reason,
+                "reason": normalize_reason(reason),
                 "timestamp": datetime.now().isoformat(),
             })
 
