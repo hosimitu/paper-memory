@@ -32,6 +32,10 @@ EMBEDDING_MODEL = "models/gemini-embedding-2"
 # [使用箇所] paper_memory/server.py
 QA_MODEL = "gemini-3.1-flash-lite"
 
+# 検索クエリ補正に使用するモデル
+# [使用箇所] paper_memory/store.py
+SEARCH_REWRITE_MODEL = "gemma-4-26b-a4b-it"
+
 # ノート間の意味的な関連性を評価し、自動リンクを構築するために使用するモデル
 # [使用箇所] paper_memory/autolinker.py
 AUTOLINK_MODEL = "gemini-3.1-flash-lite"

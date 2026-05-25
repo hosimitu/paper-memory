@@ -17,6 +17,10 @@
 Prompts — AI用プロンプトの一元管理モジュール / Centralized prompt management module for AI
 """
 
+from .config import DEFAULT_LANGUAGE
+import json
+
+
 def get_table_fix_prompt(table_md: str) -> str:
     """
     [使用箇所 / Location] scripts/extract_pdf.py -> fix_table_with_llm()
@@ -34,13 +38,83 @@ Original broken table:
 {table_md}
 """
 
-from .config import DEFAULT_LANGUAGE
 
-def get_qa_assistant_prompt(context_str: str, query_text: str, lang: str = DEFAULT_LANGUAGE) -> str:
+def get_search_rewrite_prompt(query: str) -> str:
+    """検索クエリ補正用のプロンプトを返す。"""
+    return (
+        "You are a search query reformulator for an academic note database. "
+        "Given a user query, generate 3 to 5 concise search queries that are likely to match note content. "
+        "Prefer explicit technical terms, acronyms, and full-name expansions when they are implied by the query. "
+        "Do not invent facts that are not present in the query. "
+        "Output only a JSON array of strings.\n\n"
+        f"User query: {query}"
+    )
+
+
+def _stringify_qa_value(value) -> str:
+    if value is None:
+        return "N/A"
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def _format_qa_context(context) -> str:
+    if isinstance(context, str):
+        return context
+
+    if not isinstance(context, dict):
+        return _stringify_qa_value(context)
+
+    metadata = context.get("metadata", {})
+    nodes = context.get("nodes", [])
+    edges = context.get("edges", [])
+
+    lines = [
+        "## Knowledge Graph Context",
+        f"- Query: {_stringify_qa_value(metadata.get('query'))}",
+        f"- Search method: {_stringify_qa_value(metadata.get('search_method', 'unknown'))}",
+        f"- Link depth: {_stringify_qa_value(metadata.get('link_depth', 0))}",
+        f"- Expand same-paper notes: {_stringify_qa_value(metadata.get('expand_paper', False))}",
+        "",
+        "## Nodes",
+    ]
+
+    for node in nodes:
+        lines.append(f"[{node.get('citation_id')}] Paper: {node.get('paper_title', 'Unknown Paper')}")
+        lines.append(f"  Note type: {node.get('note_type', 'other')}")
+        lines.append(f"  Source: {node.get('source_type', 'direct')}")
+        lines.append(f"  Depth: {node.get('depth', 0)}")
+        if node.get("linked_from_citation_id") is not None:
+            lines.append(f"  Linked From: [{node.get('linked_from_citation_id')}]")
+        if node.get("same_paper_sources"):
+            lines.append(f"  Same paper sources: {', '.join(f'[{cid}]' for cid in node.get('same_paper_sources'))}")
+        if node.get("link_reason"):
+            lines.append(f"  Link reason: {node.get('link_reason')}")
+        lines.append(f"  Content: {_stringify_qa_value(node.get('content', ''))}")
+        lines.append(f"  Context: {_stringify_qa_value(node.get('context', ''))}")
+        lines.append("")
+
+    if edges:
+        lines.extend(["## Relationships"])
+        for edge in edges:
+            lines.append(
+                f"- [{edge.get('from')}] -> [{edge.get('to')}] ({edge.get('relation_type', 'related')}, depth {edge.get('depth', 0)})"
+            )
+            if edge.get("reason"):
+                lines.append(f"  Reason: {edge.get('reason')}")
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+
+def get_qa_assistant_prompt(context, query_text: str, lang: str = DEFAULT_LANGUAGE) -> str:
     """
     [使用箇所 / Location] paper_memory/server.py -> handle_api_post()
     [用途 / Purpose] ダッシュボードのQA機能で、ノートの内容をもとに回答する / Provide answers based on note contents for the dashboard's QA feature
     """
+    context_str = _format_qa_context(context)
+
     if lang == "en":
         return f"""You are a research assistant.
 Answer the user's query in English based ONLY on the "Provided Knowledge Notes" below.
@@ -51,6 +125,8 @@ Answer the user's query in English based ONLY on the "Provided Knowledge Notes" 
 3. If the provided information is insufficient to answer the query, output exactly: "I cannot tell from the provided information."
 4. Append source citation numbers like [1], [2] to the relevant parts of your answer based on the note sources.
 5. Do NOT include a reference list at the end.
+6. The provided context is a knowledge graph. Treat linked notes as explicitly related context, and treat same-paper nodes as supplementary context from the same paper.
+7. When you use a linked or same-paper note, preserve the graph relation in your explanation and cite the source node number(s).
 
 ## Example Output:
 (Your thinking process can be placed here)
@@ -58,7 +134,7 @@ Answer the user's query in English based ONLY on the "Provided Knowledge Notes" 
 Based on the provided information, the answer is as follows.
 
 * Method A: Thin film processing using XX is possible [1].
-* Method B: By using YY... [2].
+* Method B: The implication is supported by [2], which is linked from [1].
 
 ---
 [Provided Knowledge Notes]
@@ -77,6 +153,8 @@ Answer the user's query in Japanese based ONLY on the "Provided Knowledge Notes"
 3. If the provided information is insufficient to answer the query, output exactly: "提供された情報からは分かりません" (I cannot tell from the provided information).
 4. Append source citation numbers like [1], [2] to the relevant parts of your answer based on the note sources.
 5. Do NOT include a reference list at the end.
+6. The provided context is a knowledge graph. Treat linked notes as explicitly related context, and treat same-paper nodes as supplementary context from the same paper.
+7. When you use a linked or same-paper note, preserve the graph relation in your explanation and cite the source node number(s).
 
 ## Example Output:
 (Your thinking process can be placed here)
@@ -84,7 +162,7 @@ Answer the user's query in Japanese based ONLY on the "Provided Knowledge Notes"
 提供された情報に基づく回答は以下の通りです。
 
 * 手法A: 〇〇による薄膜化が可能です [1]。
-* 手法B: △△を用いることで... [2]。
+* 手法B: この解釈は [2] によって補強されており、[1] からリンクされた補助情報です。
 
 ---
 [Provided Knowledge Notes]
