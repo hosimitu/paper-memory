@@ -48,6 +48,7 @@ pdf/*.pdf
 # 一時作業用ディレクトリ
 scratch/
 _backup/
+tests/
 # 生成されたユーザーデータ
 notes/*.json
 references/*.json
