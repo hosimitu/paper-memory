@@ -556,7 +556,7 @@ def cmd_autolink(args, store: NoteStore) -> None:
             # CLI表示用に理由をパース
             display_reason = reason
             if isinstance(reason, dict):
-                display_reason = reason.get("ja") or reason.get("en") or str(reason)
+                display_reason = reason.get("local") or reason.get("ja") or reason.get("en") or str(reason)
 
             # 既にリンク済みかチェック（既存リンクの取得メソッドがない場合は store.add_link の戻り値で判断）
             if not args.quiet:

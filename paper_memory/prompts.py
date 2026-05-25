@@ -105,12 +105,13 @@ Do not just match keywords; prioritize whether connecting these two notes genera
 
 Output MUST be ONLY a JSON array following the schema below (Do NOT include Markdown formatting like ```json).
 [
+[
   {{
     "target_id": "Candidate note ID",
     "is_linked": true,
     "reason": {{
       "en": "Brief reason for the link in English (1-2 sentences)",
-      "{DEFAULT_LANGUAGE}": "Reason in {DEFAULT_LANGUAGE} (1-2 sentences)"
+      "local": "Reason in the local language (1-2 sentences)"
     }}
   }}
 ]

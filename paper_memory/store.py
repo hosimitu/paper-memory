@@ -28,7 +28,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from .note import PaperNote, SourcePaper
+from .note import PaperNote, SourcePaper, normalize_reason
 from .database import Database
 from .ai_models import EMBEDDING_MODEL
 
@@ -113,6 +113,15 @@ class NoteStore:
                 note.source_paper = SourcePaper(title=note.source_paper)
             else:
                 note.source_paper = SourcePaper()
+
+        note.evolution_history = [
+            {
+                **event,
+                "reason": normalize_reason(event.get("reason", ""))
+            } if isinstance(event, dict) else event
+            for event in note.evolution_history
+        ]
+
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             sp = note.source_paper
