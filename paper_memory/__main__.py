@@ -115,6 +115,7 @@ def create_parser() -> argparse.ArgumentParser:
     extract_parser.add_argument("--analyze-tables", action="store_true", help="表画像を LLM で解析して Markdown 表に変換する（docling のみ）")
     extract_parser.add_argument("--light", action="store_true", help="marker バックエンドの軽量モード（CPU のみ・OCR なし）")
     extract_parser.add_argument("--base-dir", default="extracted", help="出力先ベースディレクトリ（デフォルト: extracted）")
+    extract_parser.add_argument("--force", action="store_true", help="既存のMarkdownがある場合でも確認なしで上書きする")
 
     # --- scan コマンド ---
     subparsers.add_parser("scan", help="pdf/ フォルダ内のファイルをスキャン")
