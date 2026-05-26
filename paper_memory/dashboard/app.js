@@ -473,8 +473,31 @@ class App {
 
     async renderPapers() {
         const papers = await this.fetchJson('/papers');
+        
+        // タイトルでアルファベット順にソート
+        papers.sort((a, b) => a.title.localeCompare(b.title));
+
+        // デフォルトはリスト表示
+        if (!this.paperViewMode) {
+            this.paperViewMode = 'list';
+        }
+
+        const headerHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h3 style="margin: 0;">${i18n.t('nav.papers') || '登録論文'}</h3>
+                <div class="view-toggle">
+                    <button id="btn-view-list" class="action-btn ${this.paperViewMode === 'list' ? 'active' : ''}" title="リスト表示">
+                        <i data-lucide="list"></i>
+                    </button>
+                    <button id="btn-view-grid" class="action-btn ${this.paperViewMode === 'grid' ? 'active' : ''}" title="タイル表示">
+                        <i data-lucide="layout-grid"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+
         const list = document.createElement('div');
-        list.className = 'paper-list grid';
+        list.className = `paper-view-container ${this.paperViewMode}-view`;
 
         papers.forEach((paper, index) => {
             const doiLink = paper.doi ? `<a href="https://doi.org/${paper.doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${paper.doi}</a>` : '-';
@@ -495,8 +518,19 @@ class App {
             list.appendChild(card);
         });
 
-        this.contentArea.innerHTML = '';
+        this.contentArea.innerHTML = headerHtml;
         this.contentArea.appendChild(list);
+
+        document.getElementById('btn-view-list').onclick = () => {
+            this.paperViewMode = 'list';
+            this.renderPapers();
+        };
+        document.getElementById('btn-view-grid').onclick = () => {
+            this.paperViewMode = 'grid';
+            this.renderPapers();
+        };
+
+        lucide.createIcons();
     }
 
     async renderReferences() {
