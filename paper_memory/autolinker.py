@@ -17,13 +17,12 @@ import json
 import os
 import sys
 
-import warnings
 try:
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=FutureWarning)
-        import google.generativeai as genai
+    from .gemini_client import generate_content_with_retry
+    from google.genai import types
+    has_genai = True
 except ImportError:
-    genai = None
+    has_genai = False
 
 from .ai_models import AUTOLINK_MODEL
 
@@ -41,8 +40,8 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
             ...
         ]
     """
-    if genai is None:
-        print("⚠️ google-generativeai がインストールされていません。", file=sys.stderr)
+    if not has_genai:
+        print("⚠️ google-genai がインストールされていません。", file=sys.stderr)
         return []
 
     # 環境変数の読み込み (config.py経由でロード済み)
@@ -51,10 +50,6 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
     if not api_key:
         print("⚠️ GEMINI_API_KEY 環境変数が設定されていません。自動リンク評価をスキップします。", file=sys.stderr)
         return []
-
-    genai.configure(api_key=api_key)
-    # 評価には高速かつ安価なモデルを使用
-    model = genai.GenerativeModel(AUTOLINK_MODEL)
 
     # ノート情報をLLMに渡すために整形
     target_json = json.dumps(target_note, ensure_ascii=False, indent=2)
@@ -76,24 +71,15 @@ def evaluate_links(target_note: dict, candidate_notes: list[dict]) -> list[dict]
 
     import time
     try:
-        max_retries = 3
-        response = None
-        for attempt in range(max_retries):
-            try:
-                response = model.generate_content(
-                    prompt,
-                    generation_config=genai.GenerationConfig(
-                        response_mime_type="application/json"
-                    )
-                )
-                break
-            except Exception as e:
-                if ("429" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
-                    wait_sec = 10 * (attempt + 1)
-                    print(f"⚠️ LLMリンク評価: レート制限発生。{wait_sec}秒待機してリトライします (試行 {attempt + 1}/{max_retries})...", file=sys.stderr)
-                    time.sleep(wait_sec)
-                    continue
-                raise e
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        response = generate_content_with_retry(
+            model=AUTOLINK_MODEL,
+            contents=prompt,
+            config=config,
+            max_retries=3
+        )
+        if response is None:
+            return []
         result_text = response.text.strip()
         
         # Robust JSON extraction

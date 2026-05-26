@@ -514,23 +514,17 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     prompt = get_qa_assistant_prompt(qa_context, query_text, lang)
 
                     # 3. LLM呼び出し
-                    import warnings
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore", category=FutureWarning)
-                        import google.generativeai as genai
+                    from .gemini_client import generate_content_with_retry
+                    
                     api_key = os.environ.get("GEMINI_API_KEY")
                     if not api_key:
                         raise ValueError("GEMINI_API_KEY is not set.")
-                    
-                    genai.configure(api_key=api_key)
-                    # ユーザー指定のモデルを使用
-                    model = genai.GenerativeModel(QA_MODEL)
                     
                     # リクエスト履歴を記録
                     global API_USAGE_LOG
                     API_USAGE_LOG.append(datetime.datetime.now())
                     
-                    response = model.generate_content(prompt)
+                    response = generate_content_with_retry(model=QA_MODEL, contents=prompt, max_retries=1)
                     
                     # 4. 後処理（思考プロセスのカット）
                     answer_text = response.text
@@ -699,8 +693,11 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             
             # 429 Too Many Requests の判定
             try:
-                from google.api_core import exceptions as google_exceptions
-                if isinstance(e, google_exceptions.ResourceExhausted):
+                from google.genai import errors as genai_errors
+                if isinstance(e, genai_errors.APIError) and getattr(e, "code", None) == 429:
+                    status_code = 429
+                    data = {"error": "AIへのリクエスト制限（Rate Limit）に達しました。しばらく待ってから再度お試しください。"}
+                elif "429" in str(e) or "quota" in str(e).lower():
                     status_code = 429
                     data = {"error": "AIへのリクエスト制限（Rate Limit）に達しました。しばらく待ってから再度お試しください。"}
                 else:

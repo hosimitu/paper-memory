@@ -916,34 +916,14 @@ class NoteStore:
                 def __init__(self, api_key: str, model_name: str):
                     self.api_key = api_key
                     self.model_name = model_name if model_name.startswith('models/') else f'models/{model_name}'
-                    import warnings
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore", category=FutureWarning)
-                        import google.generativeai as genai
-                        genai.configure(api_key=self.api_key)
                 def __call__(self, input: chromadb.Documents) -> chromadb.Embeddings:
-                    import google.generativeai as genai
-                    import warnings
-                    import time
-                    import sys
-                    max_retries = 3
-                    for attempt in range(max_retries):
-                        try:
-                            with warnings.catch_warnings():
-                                warnings.simplefilter("ignore", category=FutureWarning)
-                                result = genai.embed_content(
-                                    model=self.model_name,
-                                    content=input,
-                                    task_type="RETRIEVAL_DOCUMENT"
-                                )
-                            return result['embedding']
-                        except Exception as e:
-                            if ("429" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
-                                wait_time = (attempt + 1) * 10
-                                print(f"⚠️ Embedding: レート制限に達しました。{wait_time}秒後にリトライします ({attempt + 1}/{max_retries})...", file=sys.stderr)
-                                time.sleep(wait_time)
-                                continue
-                            raise e
+                    from .gemini_client import embed_content_with_retry
+                    return embed_content_with_retry(
+                        model=self.model_name,
+                        contents=input,
+                        task_type="RETRIEVAL_DOCUMENT",
+                        max_retries=3
+                    )
             
             api_key = os.environ.get("GEMINI_API_KEY")
             if api_key:
