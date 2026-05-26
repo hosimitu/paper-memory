@@ -137,13 +137,44 @@ def main_extract(args) -> None:
         print(f"  表画像解析  : 有効 (LLM)")
 
     try:
-        result = extract(
-            pdf_path=args.pdf_path,
-            backend=backend,
-            analyze_tables=getattr(args, "analyze_tables", False),
-            light_mode=getattr(args, "light", False),
-            base_dir=getattr(args, "base_dir", "extracted"),
-        )
+        extractor_instance = _get_backend(backend)
+        pdf_path = Path(args.pdf_path)
+        base_dir = getattr(args, "base_dir", "extracted")
+        output_dir = extractor_instance.prepare_output_dir(pdf_path, base_dir)
+        md_path = output_dir / f"{output_dir.name}.md"
+
+        skip_extraction = False
+        if md_path.exists() and not getattr(args, "force", False):
+            print(f"\n⚠️ 既に抽出済みの Markdown ファイルが存在します: {md_path.absolute()}")
+            try:
+                ans = input("既存の Markdown ファイルを利用しますか？ [Y/n]: ").strip().lower()
+                if ans not in ("n", "no"):
+                    skip_extraction = True
+            except EOFError:
+                skip_extraction = True
+                print("⏭️ (対話入力が利用できないため、既存のファイルを利用します。強制上書きする場合は --force を指定してください)")
+
+        if skip_extraction:
+            print("⏭️ 抽出処理をスキップし、既存のファイルを読み込みます。")
+            from .extractors.base import ExtractionResult
+            image_dir = output_dir / "images"
+            images = list(image_dir.glob("*.png")) if image_dir.exists() else []
+            table_images = [p for p in images if p.name.startswith("table-")]
+            result = ExtractionResult(
+                markdown=md_path.read_text(encoding="utf-8"),
+                images=images,
+                table_images=table_images,
+                output_dir=output_dir,
+                backend_name=backend,
+            )
+        else:
+            result = extract(
+                pdf_path=args.pdf_path,
+                backend=backend,
+                analyze_tables=getattr(args, "analyze_tables", False),
+                light_mode=getattr(args, "light", False),
+                base_dir=getattr(args, "base_dir", "extracted"),
+            )
 
         print(f"\n✅ 解析完了！")
         print(f"  出力先     : {result.output_dir.absolute()}")
