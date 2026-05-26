@@ -552,7 +552,7 @@ class NoteStore:
         element_type_filter: Optional[str] = None,
         distance_threshold: Optional[float] = None,
         rewritten_queries: Optional[list[str]] = None,
-        use_ai_rewrite: bool = True,
+        use_ai_rewrite: bool = False,
     ) -> dict:
         """
         セマンティック検索
@@ -577,11 +577,6 @@ class NoteStore:
             return {"results": self._keyword_search(query, n_results), "method": "keyword", "rewritten_queries": rewritten_queries}
 
         query_candidates = [query]
-        if rewritten_queries:
-            query_candidates = list(dict.fromkeys([query, *rewritten_queries]))
-
-        query_candidates = [query]
-        rewritten_queries = self._rewrite_ambiguous_query(query)
         if rewritten_queries:
             query_candidates = list(dict.fromkeys([query, *rewritten_queries]))
 
@@ -612,7 +607,7 @@ class NoteStore:
         distance_threshold: Optional[float] = None,
         element_type_filter: Optional[str] = None,
         max_total: int = 100,
-        use_ai_rewrite: bool = True,
+        use_ai_rewrite: bool = False,
     ) -> dict:
         """
         グラフ探索付きセマンティック検索
