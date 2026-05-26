@@ -47,6 +47,7 @@ Additions in this file are explicitly marked as "CLARIFICATION" or "FALLBACK" wh
      *CLARIFICATION: marker-pdf is long-running and should be used only with explicit user consent (exact trigger phrase required).* 
 
 2. **Text-First Analysis**: First base analysis on the Markdown under `extracted/`. Only access images if needed for figure/table verification.
+   - **Search Efficiency**: When searching across large extracted texts or multiple files, ALWAYS use the `grep_search` tool (which uses ripgrep) to efficiently find exact pattern matches instead of reading entire files or running generic shell commands.
    - **FALLBACK**: If the agent cannot access the filesystem, request the user to upload the extracted Markdown or provide the file contents in chat.
 
 3. **Phased Note Generation**: Recommended 3-turn workflow:
