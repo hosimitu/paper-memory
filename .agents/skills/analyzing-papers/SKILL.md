@@ -47,7 +47,10 @@ Additions in this file are explicitly marked as "CLARIFICATION" or "FALLBACK" wh
      *CLARIFICATION: marker-pdf is long-running and should be used only with explicit user consent (exact trigger phrase required).* 
 
 2. **Text-First Analysis**: First base analysis on the Markdown under `extracted/`. Only access images if needed for figure/table verification.
-   - **Search Efficiency**: When searching across large extracted texts or multiple files, ALWAYS use the `grep_search` tool (which uses ripgrep) to efficiently find exact pattern matches instead of reading entire files or running generic shell commands.
+   - **Search Efficiency**: Use the correct tool for each search type to minimize token usage and latency:
+     - **File Name Search/Path Resolution** (e.g., finding PDF or Markdown files): Use the `list_dir` tool to get the directory listing, and let the agent perform pattern matching internally. Do NOT use shell commands like `dir`, `ls`, or `Get-ChildItem` for this purpose.
+     - **File Content Search** (e.g., searching text inside extracted Markdown): Use the `grep_search` tool (ripgrep). Avoid reading the entire file contents or running shell commands for search.
+     - **Example**: When looking for a specific paper PDF in the `pdf/` folder -> use `list_dir("pdf/")` to get the list -> filter the name yourself (do not use shell `Where-Object` or `grep`).
    - **FALLBACK**: If the agent cannot access the filesystem, request the user to upload the extracted Markdown or provide the file contents in chat.
 
 3. **Phased Note Generation**: Recommended 3-turn workflow:

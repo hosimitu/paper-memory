@@ -195,10 +195,9 @@ class DoclingBackend(ExtractorBackend):
         """
         try:
             from PIL import Image
-            import warnings
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=FutureWarning)
-                import google.generativeai as genai
+            from ..gemini_client import generate_content_with_retry
+            from google.genai import types
+            import io
             import re
         except ImportError as e:
             print(f"  [LLM] ライブラリ不足: {e}", file=sys.stderr)
@@ -207,8 +206,6 @@ class DoclingBackend(ExtractorBackend):
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             return markdown
-
-        genai.configure(api_key=api_key)
 
         from ..ai_models import TABLE_IMAGE_MODEL, FORMULA_IMAGE_MODEL
         from ..prompts import get_table_image_analysis_prompt, get_formula_image_analysis_prompt
@@ -221,8 +218,6 @@ class DoclingBackend(ExtractorBackend):
             model_name = FORMULA_IMAGE_MODEL
             prompt_func = get_formula_image_analysis_prompt
             placeholder_pattern = r'!\[image\]\(images/formula-\d+\.png\)'
-
-        model = genai.GenerativeModel(model_name)
         
         combined_pattern = re.compile(f'({placeholder_pattern}|{text_pattern})', re.MULTILINE)
         matches = list(combined_pattern.finditer(markdown))
@@ -253,22 +248,17 @@ class DoclingBackend(ExtractorBackend):
             try:
                 print(f"  [LLM] {item_type} 画像を解析中 ({idx+1}/{len(image_paths)}): {img_id}")
                 img = Image.open(img_path)
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                image_part = types.Part.from_bytes(data=buf.getvalue(), mime_type="image/png")
                 prompt = prompt_func()
                 
-                max_retries = 3
-                response = None
-                for attempt in range(max_retries):
-                    try:
-                        last_request_time = time.time()
-                        response = model.generate_content([prompt, img])
-                        break
-                    except Exception as e:
-                        if ("429" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
-                            wait_sec = 10 * (attempt + 1)
-                            print(f"  [LLM] レート制限発生。{wait_sec} 秒待機 (試行 {attempt + 1})...")
-                            time.sleep(wait_sec)
-                            continue
-                        raise e
+                last_request_time = time.time()
+                response = generate_content_with_retry(
+                    model=model_name,
+                    contents=[prompt, image_part],
+                    max_retries=3
+                )
 
                 if not response:
                     fallback = True
