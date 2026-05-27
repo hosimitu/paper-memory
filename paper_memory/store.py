@@ -494,18 +494,14 @@ class NoteStore:
             return []
 
         try:
-            import warnings
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=FutureWarning)
-                import google.generativeai as genai
-
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if not api_key:
+            from .gemini_client import generate_content_with_retry
+            prompt = get_search_rewrite_prompt(query)
+            response = generate_content_with_retry(
+                model=SEARCH_REWRITE_MODEL,
+                contents=prompt
+            )
+            if not response:
                 return []
-
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(SEARCH_REWRITE_MODEL)
-            response = model.generate_content(get_search_rewrite_prompt(query))
             raw_text = response.text.strip()
             return self._parse_rewrite_candidates(raw_text)
         except Exception as e:
