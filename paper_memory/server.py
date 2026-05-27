@@ -268,6 +268,19 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         md_path = get_markdown_path(p.get("pdf_path"), p.get("title"))
                         p["has_markdown"] = bool(md_path and md_path.exists())
                         p["markdown_url"] = f"/extracted/{md_path.parent.name}/{md_path.name}" if md_path and md_path.exists() else None
+                        
+                        # サムネイル画像の検出
+                        thumbnail_url = None
+                        if md_path and md_path.exists():
+                            images_dir = md_path.parent / "images"
+                            if images_dir.exists() and images_dir.is_dir():
+                                image_files = sorted(
+                                    [f for f in images_dir.iterdir() if f.is_file() and f.suffix.lower() in ('.png', '.jpg', '.jpeg')]
+                                )
+                                if image_files:
+                                    thumbnail_url = f"/extracted/{md_path.parent.name}/images/{image_files[0].name}"
+                        p["thumbnail_url"] = thumbnail_url
+                        
                         papers.append(p)
                     data = papers
             elif path.startswith("/api/papers/"):

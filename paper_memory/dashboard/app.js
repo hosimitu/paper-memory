@@ -505,14 +505,21 @@ class App {
             if (paper.has_markdown && paper.id) {
                 mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
             }
+            const thumbnailHtml = paper.thumbnail_url 
+                ? `<div class="paper-thumbnail"><img src="${paper.thumbnail_url}" alt="Thumbnail"></div>`
+                : `<div class="paper-thumbnail"><i data-lucide="image" style="width:32px;height:32px;opacity:0.3;"></i></div>`;
+
             const card = document.createElement('div');
             card.className = 'dashboard-section paper-card';
             card.innerHTML = `
-                <h4>[${index + 1}] ${paper.title}</h4>
-                <div class="paper-meta">
-                    <p>${i18n.t('modal.authors') || 'Authors'}: ${getAuthorsList(paper.authors).join(', ')}</p>
-                    <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
-                    <p>DOI: ${doiLink}${mdLink}</p>
+                ${thumbnailHtml}
+                <div class="paper-content">
+                    <h4>[${index + 1}] ${paper.title}</h4>
+                    <div class="paper-meta">
+                        <p>${i18n.t('modal.authors') || 'Authors'}: ${getAuthorsList(paper.authors).join(', ')}</p>
+                        <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
+                        <p>DOI: ${doiLink}${mdLink}</p>
+                    </div>
                 </div>
             `;
             list.appendChild(card);

@@ -1261,3 +1261,49 @@ body {
 .paper-view-container.grid-view .paper-card .paper-meta {
     margin-top: auto;
 }
+
+/* Paper Card with Thumbnail */
+.paper-card {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.paper-thumbnail {
+    flex-shrink: 0;
+    width: 100px;
+    height: 130px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+}
+
+.paper-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background-color: white; /* to handle transparent backgrounds well */
+}
+
+.paper-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Grid View specific overrides */
+.paper-view-container.grid-view .paper-card {
+    flex-direction: column;
+    gap: 16px;
+}
+
+.paper-view-container.grid-view .paper-thumbnail {
+    width: 100%;
+    height: 160px;
+}
