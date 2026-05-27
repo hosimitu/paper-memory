@@ -64,112 +64,128 @@ class DoclingBackend(ExtractorBackend):
 
         print(f"[docling] 変換を開始します: {pdf_path.name}")
 
+        import tempfile
+        import shutil
+
         # Windows での HuggingFace シンボリックリンクエラーを回避
         os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
 
-        # 1. パイプライン設定
-        pipeline_options = PdfPipelineOptions()
-        pipeline_options.generate_picture_images = True  # 図を画像化
-        pipeline_options.generate_table_images = True    # 表を画像化
-        pipeline_options.generate_page_images = True     # 数式のクロップ用にページ画像を生成
-        pipeline_options.do_formula_enrichment = False   # 重いローカル解析はオフ（Gemini で行うため）
-        pipeline_options.images_scale = images_scale
+        # 特殊文字による docling のエラーを回避するため、安全な名前の一時ファイルにコピーして処理する
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp_pdf_path = Path(tmp.name)
 
-        # 2. 変換実行
-        converter = DocumentConverter(format_options={
-            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-        })
-        result = converter.convert(pdf_path)
-        doc = result.document
+        try:
+            shutil.copy2(pdf_path, tmp_pdf_path)
 
-        # 3. 画像ディレクトリ準備
-        image_dir = output_dir / "images"
-        image_dir.mkdir(parents=True, exist_ok=True)
+            # 1. パイプライン設定
+            pipeline_options = PdfPipelineOptions()
+            pipeline_options.generate_picture_images = True  # 図を画像化
+            pipeline_options.generate_table_images = True    # 表を画像化
+            pipeline_options.generate_page_images = True     # 数式のクロップ用にページ画像を生成
+            pipeline_options.do_formula_enrichment = False   # 重いローカル解析はオフ（Gemini で行うため）
+            pipeline_options.images_scale = images_scale
 
-        # 4. 図・表・数式の画像を保存
-        saved_pictures: list[Path] = []
-        table_images: list[Path] = []
-        formula_images: list[Path] = []
+            # 2. 変換実行
+            converter = DocumentConverter(format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            })
+            result = converter.convert(tmp_pdf_path)
+            doc = result.document
 
-        for item, _level in doc.iterate_items():
-            if isinstance(item, (PictureItem, TableItem, FormulaItem)):
-                img = None
-                if hasattr(item, "image") and item.image:
-                    img = item.image.pil_image
+            # 3. 画像ディレクトリ準備
+            image_dir = output_dir / "images"
+            image_dir.mkdir(parents=True, exist_ok=True)
+
+            # 4. 図・表・数式の画像を保存
+            saved_pictures: list[Path] = []
+            table_images: list[Path] = []
+            formula_images: list[Path] = []
+
+            for item, _level in doc.iterate_items():
+                if isinstance(item, (PictureItem, TableItem, FormulaItem)):
+                    img = None
+                    if hasattr(item, "image") and item.image:
+                        img = item.image.pil_image
+                    
+                    # 画像がない（または数式）場合は、ページ画像からクロップを試みる
+                    if not img and item.prov:
+                        try:
+                            page_no = item.prov[0].page_no
+                            page = result.pages[page_no - 1]
+                            if page.image:
+                                # 座標を取得してクロップ
+                                bbox = item.prov[0].bbox
+                                # get_rect() または直接座標を使用
+                                # docling 2.x の bbox.as_tuple() は [x0, y0, x1, y1] (bottom-up) の場合がある
+                                # PIL は [left, top, right, bottom] (top-down)
+                                # page.image.pil_image は既に images_scale が適用されている可能性があるため注意
+                                img = item.get_image(result.document)
+                        except Exception as e:
+                            print(f"  [docling] 画像の取得に失敗しました ({item.self_ref}): {e}")
+
+                    if img:
+                        if isinstance(item, PictureItem):
+                            item_type_label = "picture"
+                        elif isinstance(item, TableItem):
+                            item_type_label = "table"
+                        else:
+                            item_type_label = "formula"
+                        
+                        ref_parts = item.self_ref.strip("#/").split("/")
+                        item_index = ref_parts[-1]
+                        filename = f"{item_type_label}-{item_index}.png"
+                        save_path = image_dir / filename
+                        img.save(save_path)
+                        
+                        if isinstance(item, PictureItem):
+                            saved_pictures.append(save_path)
+                        elif isinstance(item, TableItem):
+                            table_images.append(save_path)
+                        else:
+                            formula_images.append(save_path)
+                        
+                        print(f"  [docling] 画像を保存しました: {filename}")
+
+            # 5. Markdown エクスポート
+            markdown_content = doc.export_to_markdown(
+                image_placeholder="![image](images/{image_id}.png)"
+            )
+
+            # プレースホルダー {image_id} を「図」の ID で順番に置換
+            for img_path in saved_pictures:
+                item_id = img_path.stem
+                markdown_content = markdown_content.replace("{image_id}", item_id, 1)
+
+            # 6. 表・数式の LLM 解析（オプション）
+            if analyze_tables:
+                if table_images:
+                    print(f"  [LLM] {len(table_images)} 個の表画像を解析し、置換します...")
+                    markdown_content = self._analyze_table_images(markdown_content, table_images)
                 
-                # 画像がない（または数式）場合は、ページ画像からクロップを試みる
-                if not img and item.prov:
-                    try:
-                        page_no = item.prov[0].page_no
-                        page = result.pages[page_no - 1]
-                        if page.image:
-                            # 座標を取得してクロップ
-                            bbox = item.prov[0].bbox
-                            # get_rect() または直接座標を使用
-                            # docling 2.x の bbox.as_tuple() は [x0, y0, x1, y1] (bottom-up) の場合がある
-                            # PIL は [left, top, right, bottom] (top-down)
-                            # page.image.pil_image は既に images_scale が適用されている可能性があるため注意
-                            img = item.get_image(result.document)
-                    except Exception as e:
-                        print(f"  [docling] 画像の取得に失敗しました ({item.self_ref}): {e}")
+                if formula_images:
+                    print(f"  [LLM] {len(formula_images)} 個の数式画像を解析し、置換します...")
+                    markdown_content = self._analyze_formula_images(markdown_content, formula_images)
 
-                if img:
-                    if isinstance(item, PictureItem):
-                        item_type_label = "picture"
-                    elif isinstance(item, TableItem):
-                        item_type_label = "table"
-                    else:
-                        item_type_label = "formula"
-                    
-                    ref_parts = item.self_ref.strip("#/").split("/")
-                    item_index = ref_parts[-1]
-                    filename = f"{item_type_label}-{item_index}.png"
-                    save_path = image_dir / filename
-                    img.save(save_path)
-                    
-                    if isinstance(item, PictureItem):
-                        saved_pictures.append(save_path)
-                    elif isinstance(item, TableItem):
-                        table_images.append(save_path)
-                    else:
-                        formula_images.append(save_path)
-                    
-                    print(f"  [docling] 画像を保存しました: {filename}")
+            # 7. Markdown ファイルを保存
+            md_path = output_dir / f"{output_dir.name}.md"
+            md_path.write_text(markdown_content, encoding="utf-8")
 
-        # 5. Markdown エクスポート
-        markdown_content = doc.export_to_markdown(
-            image_placeholder="![image](images/{image_id}.png)"
-        )
+            print(f"[docling] 抽出完了: {md_path}")
+            print(f"[docling] 画像保存先: {image_dir}")
 
-        # プレースホルダー {image_id} を「図」の ID で順番に置換
-        for img_path in saved_pictures:
-            item_id = img_path.stem
-            markdown_content = markdown_content.replace("{image_id}", item_id, 1)
-
-        # 6. 表・数式の LLM 解析（オプション）
-        if analyze_tables:
-            if table_images:
-                print(f"  [LLM] {len(table_images)} 個の表画像を解析し、置換します...")
-                markdown_content = self._analyze_table_images(markdown_content, table_images)
-            
-            if formula_images:
-                print(f"  [LLM] {len(formula_images)} 個の数式画像を解析し、置換します...")
-                markdown_content = self._analyze_formula_images(markdown_content, formula_images)
-
-        # 7. Markdown ファイルを保存
-        md_path = output_dir / f"{output_dir.name}.md"
-        md_path.write_text(markdown_content, encoding="utf-8")
-
-        print(f"[docling] 抽出完了: {md_path}")
-        print(f"[docling] 画像保存先: {image_dir}")
-
-        return ExtractionResult(
-            markdown=markdown_content,
-            images=saved_pictures + table_images + formula_images,
-            table_images=table_images,
-            output_dir=output_dir,
-            backend_name="docling",
-        )
+            return ExtractionResult(
+                markdown=markdown_content,
+                images=saved_pictures + table_images + formula_images,
+                table_images=table_images,
+                output_dir=output_dir,
+                backend_name="docling",
+            )
+        finally:
+            if tmp_pdf_path.exists():
+                try:
+                    tmp_pdf_path.unlink()
+                except Exception as e:
+                    print(f"  [Warning] 一時ファイルの削除に失敗しました: {e}", file=sys.stderr)
 
     def _analyze_table_images(self, markdown: str, table_images: list[Path]) -> str:
         """表画像を Gemini で解析し置換する (15 RPM 対応)"""

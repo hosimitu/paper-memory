@@ -50,18 +50,19 @@ class ExtractorBackend(ABC):
     def prepare_output_dir(self, pdf_path: Path, base_dir: str = "extracted") -> Path:
         """
         extracted/ 配下に論文名ベースの出力ディレクトリを作成する。
-        PDFファイル名から安全なディレクトリ名を生成する（非ASCII文字は削除）。
+        PDFファイル名から安全なディレクトリ名を生成する（非ASCII文字も許容）。
         """
         # 1. 拡張子を除いたファイル名を取得
         stem = pdf_path.stem
-        # 2. 非ASCII文字を除去（互換性のため）
-        safe_stem = stem.encode('ascii', 'ignore').decode('ascii')
-        if not safe_stem.strip():
-            # もし全て非ASCIIだった場合は fallback
-            safe_stem = "paper"
-        # 3. 記号を削除し、スペースをアンダースコアに置換
-        clean_name = re.sub(r'[^a-zA-Z0-9\s_-]', '', safe_stem).strip().replace(' ', '_')
-        # 4. 長すぎる場合は切り詰め（Windows MAX_PATH 考慮）
+        # 2. 不正な文字を除去し、スペースをアンダースコアに置換
+        # \w は Unicode の文字（アクセント付き文字や日本語など）にもマッチします
+        clean_name = re.sub(r'[^\w\s-]', '', stem).strip().replace(' ', '_')
+        
+        if not clean_name:
+            # もし全て削除されてしまった場合は fallback
+            clean_name = "paper"
+            
+        # 3. 長すぎる場合は切り詰め（Windows MAX_PATH 考慮）
         if len(clean_name) > 80:
             clean_name = clean_name[:80].rstrip('_')
         
