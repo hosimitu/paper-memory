@@ -1,7 +1,16 @@
+# ベクトル検索インデックス
 chromadb
+# Google Gemini API クライアント (google-genai)
 google-genai
+# 環境変数管理
 python-dotenv
+# PDF 軽量抽出バックエンド（フォールバック用）
 pypdf
+# PDF 高精度抽出バックエンド（デフォルト）
 docling
 docling-core
+# 画像処理（docling の表画像解析で使用）
 Pillow
+
+# オプション: 高精度バックエンド（--use-marker フラグで使用、手動インストールが必要）
+# pip install marker-pdf

@@ -8,9 +8,9 @@ This project, **Paper Memory**, uses the following open-source software and thir
 - **License**: Apache License 2.0
 - **Description**: The AI-native open-source embedding database.
 
-### [google-generativeai](https://github.com/google/generative-ai-python)
+### [google-genai](https://github.com/googleapis/python-genai)
 - **License**: Apache License 2.0
-- **Description**: Google Generative AI SDK for Python.
+- **Description**: Google Gen AI SDK for Python（新世代の公式 Gemini API クライアント）。
 
 ### [docling](https://github.com/DS4SD/docling) & [docling-core](https://github.com/DS4SD/docling-core)
 - **License**: MIT License
@@ -28,12 +28,16 @@ This project, **Paper Memory**, uses the following open-source software and thir
 - **License**: BSD 3-Clause License
 - **Description**: A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files.
 
+### [marker-pdf](https://github.com/VikParuchuri/marker) *(オプション)*
+- **License**: GPL-3.0 License
+- **Description**: Converts PDF to Markdown quickly with high accuracy. Used via `--use-marker` flag. Must be installed separately: `pip install marker-pdf`.
+
 ---
 
 ## License Texts
 
 ### Apache License 2.0
-*(Applies to: chromadb, google-generativeai)*
+*(Applies to: chromadb, google-genai)*
 A copy of the Apache License 2.0 can be found at: [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
 ### MIT License
@@ -47,3 +51,7 @@ A copy of the HPND License can be found at: [https://opensource.org/licenses/HPN
 ### BSD 3-Clause License
 *(Applies to: python-dotenv, pypdf)*
 A copy of the BSD 3-Clause License can be found at: [https://opensource.org/licenses/BSD-3-Clause](https://opensource.org/licenses/BSD-3-Clause)
+
+### GPL-3.0 License
+*(Applies to: marker-pdf — optional dependency)*
+A copy of the GNU General Public License v3.0 can be found at: [https://www.gnu.org/licenses/gpl-3.0.html](https://www.gnu.org/licenses/gpl-3.0.html)

@@ -45,7 +45,7 @@ A-Memの設計思想（Zettelkasten原則：原子性・リンキング・進化
 
 ## 🚀 セットアップ（万全な環境の構築）
 
-本システムの全機能（高精度な検索・AIによる自動リンク生成など）をフル活用するためには、以下の3ステップをすべて実施して「万全な環境」を構築してください。
+本システムの全機能（高精度な検索・AIによる自動リンク生成など）をフル活用するためには、以下のステップをすべて実施して環境を構築してください。
 
 ### 1. Python環境の構築 (必須)
 バックエンド処理を担うPython環境をセットアップします。
@@ -93,6 +93,22 @@ New-Item .env -ItemType File
 ```env
 GEMINI_API_KEY="あなたのAPIキー"
 PAPER_MEMORY_LANGUAGE="ja"  # デフォルト言語 (ja または en)
+```
+
+### 4. Gemini CLI のインストール (必須)
+論文の読み込みと解析のフロントエンドとして使用します。
+
+```powershell
+npm install -g @google/gemini-cli
+```
+
+### 5. 動作確認
+```powershell
+# バックエンドの確認
+python -m paper_memory stats
+
+# フロントエンドの確認
+gemini
 ```
 
 ---
@@ -156,7 +172,8 @@ python -m paper_memory stats                              # 統計情報の表�
 python -m paper_memory list [--paper "論文名"]             # 一覧
 python -m paper_memory search --query "検索クエリ"         # 検索
 python -m paper_memory serve [--port 8080]                # ダッシュボード起動
-python -m paper_memory autolink --paper-title "論文名"    # 自動リンク構築
+python -m paper_memory autolink --note-id "ノートID"      # 自動リンク構築（単一ノート）
+python -m paper_memory autolink --paper-title "論文名"    # 自動リンク構築（論文全体）
 python -m paper_memory refs                               # 未読参考文献一覧
 python -m paper_memory cleanup                            # scratch/ の掃除
 ```
