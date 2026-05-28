@@ -30,6 +30,8 @@ from .ai_models import QA_MODEL
 from .config import DEFAULT_LANGUAGE
 import datetime
 import re
+from PIL import Image
+import base64
 
 def get_markdown_path(pdf_path_str: str, title: str = "", base_dir: str = "extracted") -> Path:
     project_root = Path(__file__).parent.parent
@@ -268,6 +270,65 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         md_path = get_markdown_path(p.get("pdf_path"), p.get("title"))
                         p["has_markdown"] = bool(md_path and md_path.exists())
                         p["markdown_url"] = f"/extracted/{md_path.parent.name}/{md_path.name}" if md_path and md_path.exists() else None
+
+                        # サムネイル画像の検出
+                        # ★ 改修点1: SVGデータを文字列として定義
+                        default_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="176" height="221" viewBox="0 0 176 221">
+                        <rect width="176" height="221" fill="#f5f5f5"/>
+                        <rect x="18" y="20" width="140" height="180" rx="8" fill="none" stroke="#999999" stroke-width="3"/>
+                        <line x1="50" y1="70" x2="126" y2="70" stroke="#bbbbbb" stroke-width="2"/>
+                        <line x1="50" y1="90" x2="126" y2="90" stroke="#bbbbbb" stroke-width="2"/>
+                        <line x1="50" y1="110" x2="100" y2="110" stroke="#bbbbbb" stroke-width="2"/>
+                        <text x="88" y="160" text-anchor="middle" fill="#777777" font-size="20" font-family="Arial, sans-serif">NO COVER</text>
+                        </svg>"""
+
+                        # ★ 改修点2: SVG文字列をBase64に変換し、Data URI形式のURLを作成する
+                        encoded_svg = base64.b64encode(default_svg.encode('utf-8')).decode('utf-8')
+                        thumbnail_url = f"data:image/svg+xml;base64,{encoded_svg}"
+                        if md_path and md_path.exists():
+                            images_dir = md_path.parent / "images"
+                            if images_dir.exists() and images_dir.is_dir():
+                                image_files = [
+                                    f for f in images_dir.iterdir() 
+                                    if f.is_file() 
+                                    and f.name.lower().startswith('picture-')
+                                    and f.suffix.lower() in ('.png', '.jpg', '.jpeg')
+                                ]
+                                
+                                best_image = None
+                                TARGET_SIZE = 40 * 1024  # 目標サイズ（40kB）
+                                MAX_SIZE = 60 * 1024     # ★ 上限サイズ（60kB未満）
+                                MIN_SIZE = 28 * 1024     # ★ 下限サイズ（28kB以上）※あまりに小さいと表紙として不適切な可能性があるため
+                                
+                                min_size_difference = float('inf')
+                                
+                                for f in image_files:
+                                    try:
+                                        with Image.open(f) as img:
+                                            width, height = img.size
+                                            aspect_ratio = height / width
+                                            
+                                            # 条件1: 縦横比が表紙の範囲（1.2 〜 1.5）
+                                            if 1.2 <= aspect_ratio <= 1.5:
+                                                
+                                                file_size = f.stat().st_size
+                                                
+                                                # ★ 条件2: ファイルサイズが「60kB未満」であること
+                                                if MIN_SIZE < file_size < MAX_SIZE:
+                                                    
+                                                    # 40kBに一番近いものを選ぶ
+                                                    size_difference = abs(file_size - TARGET_SIZE)
+                                                    if size_difference < min_size_difference:
+                                                        min_size_difference = size_difference
+                                                        best_image = f
+                                    except Exception:
+                                        continue
+                                 
+                                if best_image:
+                                    thumbnail_url = f"/extracted/{md_path.parent.name}/images/{best_image.name}"
+
+                        p["thumbnail_url"] = thumbnail_url
+                        
                         papers.append(p)
                     data = papers
             elif path.startswith("/api/papers/"):

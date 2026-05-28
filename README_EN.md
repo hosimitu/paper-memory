@@ -159,7 +159,8 @@ python -m paper_memory extract "pdf/paper.pdf"            # Extract text from PD
 python -m paper_memory add --file scratch/notes.json      # Add notes from file
 python -m paper_memory search --query "search query"      # Semantic search
 python -m paper_memory list [--paper "title"]             # List notes
-python -m paper_memory autolink --paper-title "title"     # AI-driven linking
+python -m paper_memory autolink --note-id "id"            # AI-driven linking (single note)
+python -m paper_memory autolink --paper-title "title"     # AI-driven linking (entire paper)
 python -m paper_memory serve [--port 8080]                # Start Web Dashboard
 python -m paper_memory stats                              # Show statistics
 python -m paper_memory delete --note-id "xxx"             # Delete note

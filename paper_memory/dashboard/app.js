@@ -473,8 +473,31 @@ class App {
 
     async renderPapers() {
         const papers = await this.fetchJson('/papers');
+        
+        // タイトルでアルファベット順にソート
+        papers.sort((a, b) => a.title.localeCompare(b.title));
+
+        // デフォルトはリスト表示
+        if (!this.paperViewMode) {
+            this.paperViewMode = 'list';
+        }
+
+        const headerHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h3 style="margin: 0;">${i18n.t('nav.papers') || '登録論文'}</h3>
+                <div class="view-toggle">
+                    <button id="btn-view-list" class="action-btn ${this.paperViewMode === 'list' ? 'active' : ''}" title="リスト表示">
+                        <i data-lucide="list"></i>
+                    </button>
+                    <button id="btn-view-grid" class="action-btn ${this.paperViewMode === 'grid' ? 'active' : ''}" title="タイル表示">
+                        <i data-lucide="layout-grid"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+
         const list = document.createElement('div');
-        list.className = 'paper-list grid';
+        list.className = `paper-view-container ${this.paperViewMode}-view`;
 
         papers.forEach((paper, index) => {
             const doiLink = paper.doi ? `<a href="https://doi.org/${paper.doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${paper.doi}</a>` : '-';
@@ -482,21 +505,39 @@ class App {
             if (paper.has_markdown && paper.id) {
                 mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
             }
+            const thumbnailHtml = paper.thumbnail_url 
+                ? `<div class="paper-thumbnail"><img src="${paper.thumbnail_url}" alt="Thumbnail"></div>`
+                : `<div class="paper-thumbnail"><i data-lucide="image" style="width:32px;height:32px;opacity:0.3;"></i></div>`;
+
             const card = document.createElement('div');
             card.className = 'dashboard-section paper-card';
             card.innerHTML = `
-                <h4>[${index + 1}] ${paper.title}</h4>
-                <div class="paper-meta">
-                    <p>${i18n.t('modal.authors') || 'Authors'}: ${getAuthorsList(paper.authors).join(', ')}</p>
-                    <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
-                    <p>DOI: ${doiLink}${mdLink}</p>
+                ${thumbnailHtml}
+                <div class="paper-content">
+                    <h4>[${index + 1}] ${paper.title}</h4>
+                    <div class="paper-meta">
+                        <p>${i18n.t('modal.authors') || 'Authors'}: ${getAuthorsList(paper.authors).join(', ')}</p>
+                        <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
+                        <p>DOI: ${doiLink}${mdLink}</p>
+                    </div>
                 </div>
             `;
             list.appendChild(card);
         });
 
-        this.contentArea.innerHTML = '';
+        this.contentArea.innerHTML = headerHtml;
         this.contentArea.appendChild(list);
+
+        document.getElementById('btn-view-list').onclick = () => {
+            this.paperViewMode = 'list';
+            this.renderPapers();
+        };
+        document.getElementById('btn-view-grid').onclick = () => {
+            this.paperViewMode = 'grid';
+            this.renderPapers();
+        };
+
+        lucide.createIcons();
     }
 
     async renderReferences() {
