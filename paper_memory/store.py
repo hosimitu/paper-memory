@@ -285,6 +285,75 @@ class NoteStore:
         self._delete_from_chroma(note_id)
         return True
 
+    def _delete_extracted_markdown(self, pdf_path_str: str, title: str) -> None:
+        import shutil
+        extracted_dir = self.base_dir / "extracted"
+        if not extracted_dir.exists():
+            return
+            
+        target_dir = None
+        if pdf_path_str:
+            stem = Path(pdf_path_str).stem
+            safe_stem = stem.encode('ascii', 'ignore').decode('ascii')
+            if not safe_stem.strip():
+                safe_stem = "paper"
+            clean_name = re.sub(r'[^a-zA-Z0-9\s_-]', '', safe_stem).strip().replace(' ', '_')
+            if len(clean_name) > 80:
+                clean_name = clean_name[:80].rstrip('_')
+            
+            candidate = extracted_dir / clean_name
+            if candidate.exists() and candidate.is_dir():
+                target_dir = candidate
+                
+        if not target_dir and title:
+            alphanum_title = re.sub(r'[^a-zA-Z0-9]', '', title).lower()
+            if alphanum_title:
+                search_term = alphanum_title[:30]
+                for d in extracted_dir.iterdir():
+                    if d.is_dir():
+                        alphanum_dir = re.sub(r'[^a-zA-Z0-9]', '', d.name).lower()
+                        if search_term in alphanum_dir:
+                            target_dir = d
+                            break
+                            
+        if target_dir and target_dir.exists():
+            try:
+                shutil.rmtree(target_dir)
+            except Exception as e:
+                print(f"⚠️ 抽出済みMarkdownフォルダの削除に失敗しました {target_dir}: {e}", file=sys.stderr)
+
+    def delete_paper(self, paper_id: int) -> dict:
+        """論文とその全ノート、抽出済みテキストを一括削除"""
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            
+            cur.execute("SELECT title, pdf_path FROM papers WHERE id = ?", (paper_id,))
+            paper_row = cur.fetchone()
+            if not paper_row:
+                return {"deleted_notes": 0, "deleted_paper": False}
+                
+            title = paper_row["title"]
+            pdf_path = paper_row["pdf_path"]
+            
+            cur.execute("SELECT id FROM notes WHERE paper_id = ?", (paper_id,))
+            note_ids = [r["id"] for r in cur.fetchall()]
+            
+            cur.execute("DELETE FROM notes WHERE paper_id = ?", (paper_id,))
+            cur.execute("DELETE FROM papers WHERE id = ?", (paper_id,))
+            conn.commit()
+            
+        if note_ids:
+            collection = self._get_chroma_collection()
+            if collection:
+                try:
+                    collection.delete(ids=note_ids)
+                except Exception as e:
+                    print(f"⚠️ ChromaDBからの削除に失敗しました: {e}", file=sys.stderr)
+                    
+        self._delete_extracted_markdown(pdf_path, title)
+        
+        return {"deleted_notes": len(note_ids), "deleted_paper": True}
+
     def list_all(self) -> list[PaperNote]:
         """全ノートを返す"""
         with self.db.get_connection() as conn:
