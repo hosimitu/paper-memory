@@ -511,6 +511,7 @@ class App {
 
             const card = document.createElement('div');
             card.className = 'dashboard-section paper-card';
+            card.style.position = 'relative';
             card.innerHTML = `
                 ${thumbnailHtml}
                 <div class="paper-content">
@@ -520,6 +521,11 @@ class App {
                         <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
                         <p>DOI: ${doiLink}${mdLink}</p>
                     </div>
+                </div>
+                <div class="paper-actions" style="position: absolute; top: 12px; right: 12px;">
+                    <button class="action-btn delete-paper-btn" data-id="${paper.id}" title="Delete Paper" style="color: #ef4444;">
+                        <i data-lucide="trash-2"></i>
+                    </button>
                 </div>
             `;
             list.appendChild(card);
@@ -536,6 +542,29 @@ class App {
             this.paperViewMode = 'grid';
             this.renderPapers();
         };
+
+        // 削除ボタンのイベントリスナー追加
+        list.querySelectorAll('.delete-paper-btn').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const paperId = btn.getAttribute('data-id');
+                if (confirm(i18n.t('paper.confirm_delete'))) {
+                    try {
+                        const res = await fetch(`/api/papers/${paperId}/delete`, { method: 'POST' });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            alert(i18n.t('paper.delete_success') + `\nDeleted notes: ${data.deleted_notes}`);
+                            this.cache = {}; // Clear cache
+                            this.renderPapers();
+                        } else {
+                            alert(i18n.t('error.alert', { message: data.error || 'Failed to delete' }));
+                        }
+                    } catch (err) {
+                        alert(i18n.t('error.alert', { message: err.message }));
+                    }
+                }
+            };
+        });
 
         lucide.createIcons();
     }

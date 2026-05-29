@@ -142,6 +142,10 @@ def create_parser() -> argparse.ArgumentParser:
     delete_parser = subparsers.add_parser("delete", help="ノートを削除")
     delete_parser.add_argument("--note-id", required=True, help="ノートID")
 
+    delete_paper_parser = subparsers.add_parser("delete-paper", help="論文とその全ノート、抽出済みテキストを一括削除")
+    delete_paper_parser.add_argument("--paper-id", required=True, type=int, help="削除する論文のID")
+    delete_paper_parser.add_argument("--yes", action="store_true", help="確認プロンプトをスキップして削除")
+
     # ========================================
     # 参考文献管理コマンド
     # ========================================
@@ -741,6 +745,39 @@ def cmd_delete(args, store: NoteStore) -> None:
         sys.exit(1)
 
 
+def cmd_delete_paper(args, store: NoteStore) -> None:
+    """論文とその全ノート、抽出済みテキストを一括削除するコマンド"""
+    # 削除前の確認
+    if not args.yes:
+        print("\n" + "="*60)
+        print("⚠️ 【警告】論文の削除を実行しようとしています。")
+        print("この操作により以下のデータが完全に削除されます：")
+        print("  - 該当論文のメタデータ")
+        print("  - 論文に紐づく【すべてのノート】")
+        print("  - 他のノートから削除対象ノートへの【すべてのリンク】")
+        print("  - ChromaDBの【検索インデックス】")
+        print("  - PDFから抽出された【Markdownデータ (extracted/)】")
+        print("="*60 + "\n")
+        
+        ans = input(f"本当に論文ID {args.paper_id} を削除しますか？ [y/N]: ").strip().lower()
+        if ans != "y":
+            print("⏭️ 削除をキャンセルしました。")
+            return
+            
+    result = store.delete_paper(args.paper_id)
+    if result.get("deleted_paper"):
+        output_json({
+            "status": "success",
+            "message": f"論文を削除しました。付随して {result.get('deleted_notes')} 件のノートと関連データが削除されました。",
+        })
+    else:
+        output_json({
+            "status": "error",
+            "message": f"論文が見つかりません: ID={args.paper_id}",
+        })
+        sys.exit(1)
+
+
 # ========================================
 # 参考文献管理コマンド
 # ========================================
@@ -981,6 +1018,7 @@ def main() -> None:
         "serve": cmd_serve,
         "get": cmd_get,
         "delete": cmd_delete,
+        "delete-paper": cmd_delete_paper,
         "cleanup": cmd_cleanup,
     }
 

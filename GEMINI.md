@@ -40,6 +40,7 @@ python -m paper_memory autolink --note-id "ノートID"   # AI自動リンク構
 python -m paper_memory stats                            # 統計情報
 python -m paper_memory get --note-id "ノートID"        # ノート取得
 python -m paper_memory delete --note-id "ノートID"     # ノート削除
+python -m paper_memory delete-paper --paper-id "論文ID" # 論文と紐づく全ノート・Markdownを一括削除
 python -m paper_memory cleanup                         # scratch フォルダを掃除
 
 # 参考文献（Reading List）操作

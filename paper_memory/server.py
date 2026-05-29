@@ -726,6 +726,24 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     status_code = 400
                     data = {"error": "Invalid path"}
+
+            elif path.startswith("/api/papers/") and path.endswith("/delete"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4:
+                    try:
+                        paper_id = int(parts[2])
+                        result = store.delete_paper(paper_id)
+                        if result.get("deleted_paper"):
+                            data = {"status": "success", "deleted_notes": result.get("deleted_notes")}
+                        else:
+                            status_code = 404
+                            data = {"error": "Paper not found"}
+                    except ValueError:
+                        status_code = 400
+                        data = {"error": "Invalid paper ID"}
+                else:
+                    status_code = 400
+                    data = {"error": "Invalid path"}
             
             elif path.startswith("/api/qa/history/") and path.endswith("/delete"):
 

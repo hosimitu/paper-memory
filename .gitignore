@@ -54,6 +54,7 @@ notes/*.json
 references/*.json
 extracted/
 output/
+plan.md
 
 # --- エディタ・OS ---
 .vscode/
