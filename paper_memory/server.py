@@ -589,10 +589,11 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     
                     # 4. 後処理（思考プロセスのカット）
                     answer_text = response.text
-                    if "===回答開始===" in answer_text:
-                        answer_text = answer_text.split("===回答開始===")[-1].strip()
-                    elif "===Answer Start===" in answer_text:
+                    if "===Answer Start===" in answer_text:
                         answer_text = answer_text.split("===Answer Start===")[-1].strip()
+                    elif "===回答開始===" in answer_text:
+                        # 互換性のため残す
+                        answer_text = answer_text.split("===回答開始===")[-1].strip()
                     elif "提供された情報に" in answer_text:
                         # マーカーがない場合のフォールバック（最初の日本語らしい文から）
                         parts = answer_text.split("提供された情報に", 1)
