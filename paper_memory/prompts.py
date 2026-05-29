@@ -17,7 +17,7 @@
 Prompts — AI用プロンプトの一元管理モジュール / Centralized prompt management module for AI
 """
 
-from .config import DEFAULT_LANGUAGE
+from .config import DEFAULT_LANGUAGE, get_language_name
 import json
 
 
@@ -115,15 +115,15 @@ def get_qa_assistant_prompt(context, query_text: str, lang: str = DEFAULT_LANGUA
     [用途 / Purpose] ダッシュボードのQA機能で、ノートの内容をもとに回答する / Provide answers based on note contents for the dashboard's QA feature
     """
     context_str = _format_qa_context(context)
+    target_language = get_language_name(lang)
 
-    if lang == "en":
-        return f"""You are a research assistant.
-Answer the user's query in English based ONLY on the "Provided Knowledge Notes" below.
+    return f"""You are a research assistant.
+Answer the user's query in {target_language} based ONLY on the "Provided Knowledge Notes" below.
 
 ## Output Rules (CRITICAL):
 1. Immediately before your answer, you MUST output a marker line: "===Answer Start===". Start your actual answer text from the next line.
 2. NEVER include guesses or general knowledge that is not stated in the provided notes.
-3. If the provided information is insufficient to answer the query, output exactly: "I cannot tell from the provided information."
+3. If the provided information is insufficient to answer the query, output exactly a short phrase meaning "I cannot tell from the provided information" in {target_language}.
 4. Append source citation numbers like [1], [2] to the relevant parts of your answer based on the note sources.
 5. Do NOT include a reference list at the end.
 6. The provided context is a knowledge graph. Treat linked notes as explicitly related context, and treat same-paper nodes as supplementary context from the same paper.
@@ -132,38 +132,10 @@ Answer the user's query in English based ONLY on the "Provided Knowledge Notes" 
 ## Example Output:
 (Your thinking process can be placed here)
 ===Answer Start===
-Based on the provided information, the answer is as follows.
+(Your answer in {target_language} here)
 
-* Method A: Thin film processing using XX is possible [1].
-* Method B: The implication is supported by [2], which is linked from [1].
-
----
-[Provided Knowledge Notes]
-{context_str}
-
-[User Query]
-{query_text}
-"""
-    else:
-        return f"""You are a research assistant.
-Answer the user's query in Japanese based ONLY on the "Provided Knowledge Notes" below.
-
-## Output Rules (CRITICAL):
-1. Immediately before your answer, you MUST output a marker line: "===回答開始===" (===Answer Start===). Start your actual answer text from the next line.
-2. NEVER include guesses or general knowledge that is not stated in the provided notes.
-3. If the provided information is insufficient to answer the query, output exactly: "提供された情報からは分かりません" (I cannot tell from the provided information).
-4. Append source citation numbers like [1], [2] to the relevant parts of your answer based on the note sources.
-5. Do NOT include a reference list at the end.
-6. The provided context is a knowledge graph. Treat linked notes as explicitly related context, and treat same-paper nodes as supplementary context from the same paper.
-7. When you use a linked or same-paper note, preserve the graph relation in your explanation and cite the source node number(s).
-
-## Example Output:
-(Your thinking process can be placed here)
-===回答開始===
-提供された情報に基づく回答は以下の通りです。
-
-* 手法A: 〇〇による薄膜化が可能です [1]。
-* 手法B: この解釈は [2] によって補強されており、[1] からリンクされた補助情報です。
+* Method A: ... [1].
+* Method B: ... [2].
 
 ---
 [Provided Knowledge Notes]

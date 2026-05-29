@@ -26,5 +26,20 @@ load_dotenv(override=True)
 # デフォルト言語設定 ('en' or 'ja')
 DEFAULT_LANGUAGE = os.environ.get("PAPER_MEMORY_LANGUAGE", "ja")
 
+# 言語コードと自然言語名のマッピング
+LANG_MAP = {
+    "en": "English",
+    "ja": "Japanese",
+    "zh": "Chinese",
+    "ko": "Korean",
+    "fr": "French",
+    "es": "Spanish",
+    "de": "German",
+}
+
+def get_language_name(lang_code: str) -> str:
+    """言語コードから自然言語名を取得する。未知のコードはそのまま返す。"""
+    return LANG_MAP.get(lang_code, lang_code)
+
 # AIモデル設定（ai_models.py から継承または統合も検討可能だが、一旦インポートしておく）
 from .ai_models import QA_MODEL, EMBEDDING_MODEL, TABLE_IMAGE_MODEL, FORMULA_IMAGE_MODEL, AUTOLINK_MODEL
