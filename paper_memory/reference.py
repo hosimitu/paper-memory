@@ -42,7 +42,7 @@ class Reference:
     cited_by_pdf: str = ""
     relevance: str = "medium"
     reason: str = ""
-    keywords: list[str] = field(default_factory=list)
+    keywords: list = field(default_factory=list)
     status: str = "unread"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -62,21 +62,6 @@ class Reference:
                 val = data[key].get("en") or data[key].get("local") or next(iter(data[key].values()), "")
                 data[key] = str(val).strip() if val else ""
 
-        if "keywords" in data:
-            kw = data["keywords"]
-            if isinstance(kw, list):
-                norm_kw = []
-                for k in kw:
-                    if isinstance(k, dict):
-                        k = k.get("en") or k.get("local") or next(iter(k.values()), "")
-                    if k:
-                        norm_kw.append(str(k))
-                data["keywords"] = norm_kw
-            elif isinstance(kw, dict):
-                # keywords might mistakenly be a single dict
-                klist = kw.get("en") or kw.get("local")
-                data["keywords"] = klist if isinstance(klist, list) else []
-                
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     @classmethod

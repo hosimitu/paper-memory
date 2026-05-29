@@ -14,8 +14,10 @@
         "local": "Why this reference is critically important (in the language specified by PAPER_MEMORY_LANGUAGE)"
       },
       "keywords": [
-        "keyword1",
-        "keyword2"
+        {
+          "en": "English Keyword",
+          "local": "Local Keyword"
+        }
       ]
     }
   ]
