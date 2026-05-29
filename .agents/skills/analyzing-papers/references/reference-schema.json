@@ -15,8 +15,8 @@
       },
       "keywords": [
         {
-          "en": "related keyword (in English)",
-          "local": "related keyword (in the language specified by PAPER_MEMORY_LANGUAGE)"
+          "en": "English Keyword",
+          "local": "Local Keyword"
         }
       ]
     }

@@ -42,7 +42,7 @@ class Reference:
     cited_by_pdf: str = ""
     relevance: str = "medium"
     reason: str = ""
-    keywords: list[str] = field(default_factory=list)
+    keywords: list = field(default_factory=list)
     status: str = "unread"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -55,6 +55,13 @@ class Reference:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Reference":
+        data = dict(data)
+        
+        for key in ["title", "doi", "journal", "cited_by"]:
+            if key in data and isinstance(data[key], dict):
+                val = data[key].get("en") or data[key].get("local") or next(iter(data[key].values()), "")
+                data[key] = str(val).strip() if val else ""
+
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     @classmethod

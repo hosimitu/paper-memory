@@ -817,7 +817,11 @@ def cmd_refs_add(args, ref_store: ReferenceStore, note_store: NoteStore) -> None
             title = title.get("en") or title.get("local") or next(iter(title.values()), "")
             item["title"] = title  # item 内も上書きしておく
         title = str(title).strip() if title else ""
-        doi = str(item.get("doi", "") or "").strip()
+        doi = item.get("doi", "")
+        if isinstance(doi, dict):
+            doi = doi.get("en") or doi.get("local") or next(iter(doi.values()), "")
+            item["doi"] = doi
+        doi = str(doi).strip() if doi else ""
         authors = item.get("authors", [])
         year = item.get("year", None)
 
