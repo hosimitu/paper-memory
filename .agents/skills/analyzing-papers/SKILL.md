@@ -176,7 +176,7 @@ Select cited literature that directly supports the core findings. If no applicab
 - Casual or passing citations.
 
 ### Output Format
-Follow `references/reference-schema.json`. FALLBACK: If unavailable, use the analogous minimal structure and require `en` + `local` for `reason` and `keywords` only when `local` is confirmed.
+Follow `references/reference-schema.json`. FALLBACK: If unavailable, use the analogous minimal structure and require `en` + `local` for `reason` only when `local` is confirmed. `keywords` should be a simple array of strings.
 
 ### Registration Procedure
 1. If DOI is explicit in the text, include it; otherwise leave empty string `""` (do NOT invent DOIs).
