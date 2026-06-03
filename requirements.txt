@@ -1,5 +1,5 @@
 # ベクトル検索インデックス
-chromadb
+sqlite-vec
 # Google Gemini API クライアント (google-genai)
 google-genai
 # 環境変数管理

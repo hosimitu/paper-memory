@@ -1208,6 +1208,12 @@ body {
     border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
+.method-badge.hybrid {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
 .method-badge.keyword {
     background: rgba(148, 163, 184, 0.1);
     color: var(--text-secondary);

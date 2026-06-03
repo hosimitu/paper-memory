@@ -215,3 +215,28 @@ Carefully analyze the image and accurately convert it into LaTeX format.
 - Use standard LaTeX notation wherever possible.
 - Output ONLY the converted formula. Do not include any explanations or greetings.
 """
+
+def get_rerank_prompt(query: str, items_json: str) -> str:
+    """
+    [使用箇所 / Location] paper_memory/store.py -> _rerank_with_llm()
+    [用途 / Purpose] ハイブリッド検索結果のリランキング（再ランク付け）を行う / Re-rank hybrid search results based on relevance to the query
+    """
+    return f"""You are an expert at evaluating the relevance of search results for a given query in an academic context.
+Given the User Query and a list of Candidate Notes (in JSON format), evaluate how well each candidate answers or relates to the query.
+Assign a relevance score from 0 to 100 for each candidate (100 being perfectly relevant, 0 being completely irrelevant).
+
+Output MUST be ONLY a JSON array of objects, containing "id" and "score" for each candidate.
+Do NOT include Markdown formatting like ```json.
+Example:
+[
+  {{"id": "note-id-1", "score": 95}},
+  {{"id": "note-id-2", "score": 40}}
+]
+
+---
+User Query:
+{query}
+
+Candidate Notes:
+{items_json}
+"""
