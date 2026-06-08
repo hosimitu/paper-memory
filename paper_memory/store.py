@@ -343,6 +343,30 @@ class NoteStore:
             
         return True
 
+    def add_link(self, source_id: str, target_id: str, reason: str = "") -> bool:
+        """指定したノート間にリンクを追加する"""
+        source = self.get(source_id)
+        if not source:
+            return False
+            
+        target = self.get(target_id)
+        if not target:
+            return False
+            
+        source.add_link(target_id, reason)
+        self.update(source)
+        return True
+
+    def remove_link(self, source_id: str, target_id: str) -> bool:
+        """指定したノート間のリンクを削除する"""
+        source = self.get(source_id)
+        if not source:
+            return False
+            
+        source.remove_link(target_id)
+        self.update(source)
+        return True
+
     def _delete_extracted_markdown(self, pdf_path_str: str, title: str) -> None:
         import shutil
         extracted_dir = self.base_dir / "extracted"
@@ -841,6 +865,109 @@ class NoteStore:
                     results.append({"note": note.to_dict(), "distance": None})
             return results
 
+
+    def find_neighbors(
+        self,
+        note_id: str,
+        n_results: int = 5,
+        element_type_filter: Optional[str] = None
+    ) -> list[dict]:
+        """指定したノートに類似するノートをベクトル検索で探す"""
+        note = self.get(note_id)
+        if not note:
+            return []
+
+        results = []
+        try:
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                
+                cur.execute("""
+                    SELECT v.rowid, v.embedding
+                    FROM note_vectors v
+                    JOIN notes n ON n.rowid = v.rowid
+                    WHERE n.id = ?
+                """, (note_id,))
+                row = cur.fetchone()
+                
+                if row and row["embedding"]:
+                    emb_bytes = row["embedding"]
+                    
+                    if element_type_filter:
+                        cur.execute("""
+                            SELECT n.id, v.distance
+                            FROM note_vectors v
+                            JOIN notes n ON n.rowid = v.rowid
+                            WHERE v.embedding MATCH ? AND v.k = ? AND n.element_type = ? AND n.id != ?
+                            ORDER BY v.distance
+                        """, (emb_bytes, n_results + 5, element_type_filter, note_id))
+                    else:
+                        cur.execute("""
+                            SELECT n.id, v.distance
+                            FROM note_vectors v
+                            JOIN notes n ON n.rowid = v.rowid
+                            WHERE v.embedding MATCH ? AND v.k = ? AND n.id != ?
+                            ORDER BY v.distance
+                        """, (emb_bytes, n_results + 5, note_id))
+                        
+                    for r in cur.fetchall():
+                        neighbor = self.get(r["id"])
+                        if neighbor:
+                            results.append({
+                                "note": neighbor.to_dict(),
+                                "distance": r["distance"]
+                            })
+                            if len(results) >= n_results:
+                                break
+        except Exception as e:
+            print(f"⚠️ sqlite-vec 検索エラー: {e}", file=sys.stderr)
+                            
+        if not results:
+            # Embeddingがない場合は、テキストからLLMで埋め込みを取得して検索
+            from .gemini_client import embed_content_with_retry
+            search_text = self._build_search_text(note)
+            try:
+                embeddings = embed_content_with_retry(
+                    model=EMBEDDING_MODEL,
+                    contents=[search_text],
+                    task_type="RETRIEVAL_QUERY"
+                )
+                if embeddings:
+                    query_emb = embeddings[0]
+                    import sqlite_vec
+                    emb_bytes = sqlite_vec.serialize_float32(query_emb)
+                    with self.db.get_connection() as conn:
+                        cur = conn.cursor()
+                        if element_type_filter:
+                            cur.execute("""
+                                SELECT n.id, v.distance
+                                FROM note_vectors v
+                                JOIN notes n ON n.rowid = v.rowid
+                                WHERE v.embedding MATCH ? AND v.k = ? AND n.element_type = ? AND n.id != ?
+                                ORDER BY v.distance
+                            """, (emb_bytes, n_results + 5, element_type_filter, note_id))
+                        else:
+                            cur.execute("""
+                                SELECT n.id, v.distance
+                                FROM note_vectors v
+                                JOIN notes n ON n.rowid = v.rowid
+                                WHERE v.embedding MATCH ? AND v.k = ? AND n.id != ?
+                                ORDER BY v.distance
+                            """, (emb_bytes, n_results + 5, note_id))
+                            
+                        for r in cur.fetchall():
+                            neighbor = self.get(r["id"])
+                            if neighbor:
+                                results.append({
+                                    "note": neighbor.to_dict(),
+                                    "distance": r["distance"]
+                                })
+                                if len(results) >= n_results:
+                                    break
+            except Exception as e:
+                print(f"⚠️ フォールバック検索エラー: {e}", file=sys.stderr)
+                        
+        return results
 
     def _build_search_text(self, note: PaperNote) -> str:
         """ノートの内容から検索用テキストを構築する"""
