@@ -848,12 +848,12 @@ class NoteStore:
         if note.source_paper and note.source_paper.title:
             parts.append(f"Title: {note.source_paper.title}")
             if note.source_paper.authors:
-                parts.append(f"Authors: {', '.join(note.source_paper.authors)}")
+                parts.append(f"Authors: {', '.join(str(a) for a in note.source_paper.authors)}")
                 
         parts.append(f"Type: {note.element_type}")
         
         if note.keywords:
-            parts.append(f"Keywords: {', '.join(note.keywords)}")
+            parts.append(f"Keywords: {', '.join(str(k) for k in note.keywords)}")
             
         if isinstance(note.content, str):
             parts.append(note.content)
