@@ -53,10 +53,6 @@ class NoteStore:
         self.db = Database(str(self.base_dir / "paper_memory.db"))
         self.db.initialize()
 
-        # ChromaDBクライアント（遅延初期化）
-        self._chroma_client = None
-        self._chroma_collection = None
-
     # ========================================
     # DB <-> Object マッピング
     # ========================================
@@ -202,6 +198,53 @@ class NoteStore:
                 """, (note.id, target_id, save_reason, created_at))
             conn.commit()
 
+    def _index_note(self, note: PaperNote, search_text: str = None) -> None:
+        """ノートを全文検索およびベクトル検索のインデックスに登録"""
+        if not search_text:
+            search_text = self._build_search_text(note)
+        
+        from .gemini_client import embed_content_with_retry
+        try:
+            embeddings = embed_content_with_retry(
+                model=EMBEDDING_MODEL,
+                contents=[search_text],
+                task_type="RETRIEVAL_DOCUMENT"
+            )
+            embedding = embeddings[0] if embeddings else None
+        except Exception as e:
+            print(f"⚠️ Embeddings API エラー: {e}", file=sys.stderr)
+            embedding = None
+
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            
+            # FTS5 へ登録
+            cur.execute("DELETE FROM notes_fts WHERE note_id = ?", (note.id,))
+            cur.execute("""
+            INSERT INTO notes_fts(note_id, search_text)
+            VALUES (?, ?)
+            """, (note.id, search_text))
+            
+            # note_vectors (sqlite-vec) へ登録
+            if embedding:
+                cur.execute("SELECT rowid FROM notes WHERE id = ?", (note.id,))
+                row = cur.fetchone()
+                if row:
+                    note_rowid = row["rowid"]
+                    try:
+                        import sqlite_vec
+                        emb_bytes = sqlite_vec.serialize_float32(embedding)
+                        cur.execute("DELETE FROM note_vectors WHERE rowid = ?", (note_rowid,))
+                        cur.execute("""
+                        INSERT INTO note_vectors(rowid, embedding)
+                        VALUES (?, ?)
+                        """, (note_rowid, emb_bytes))
+                    except ImportError:
+                        pass
+                    except Exception as e:
+                        print(f"⚠️ sqlite-vec への登録をスキップしました: {e}", file=sys.stderr)
+            conn.commit()
+
     # ========================================
     # CRUD操作
     # ========================================
@@ -209,43 +252,53 @@ class NoteStore:
     def add(self, note: PaperNote) -> PaperNote:
         """ノートを追加・保存"""
         self._save_note(note)
-        try:
-            self._add_to_chroma(note)
-        except Exception as e:
-            # SQLite には保存されているがインデックスに失敗したことを警告
-            print(f"⚠️ Note saved to DB, but indexing failed: {e}", file=sys.stderr)
+        self._index_note(note)
         return note
 
     def add_batch(self, notes: list[PaperNote]) -> list[PaperNote]:
         """複数ノートを一括追加"""
-        ids = []
-        documents = []
-        metadatas = []
+        from .gemini_client import embed_content_with_retry
         
         for note in notes:
             self._save_note(note)
-            ids.append(note.id)
-            documents.append(self._build_search_text(note))
-            metadatas.append({
-                "element_type": note.element_type,
-                "paper_title": note.source_paper.title,
-                "timestamp": note.timestamp,
-            })
             
-        collection = self._get_chroma_collection()
-        if collection:
-            try:
-                self._upsert_with_retry(
-                    collection,
-                    ids=ids,
-                    documents=documents,
-                    metadatas=metadatas
-                )
-            except Exception as e:
-                print(f"⚠️ Batch saved to DB, but indexing failed: {e}", file=sys.stderr)
-        else:
-            print("⚠️ ChromaDB collection is not available for indexing. Vector search will be disabled.", file=sys.stderr)
+        search_texts = [self._build_search_text(note) for note in notes]
+        try:
+            embeddings = embed_content_with_retry(
+                model=EMBEDDING_MODEL,
+                contents=search_texts,
+                task_type="RETRIEVAL_DOCUMENT"
+            )
+        except Exception as e:
+            print(f"⚠️ Batch Embeddings API エラー: {e}", file=sys.stderr)
+            embeddings = [None] * len(notes)
+            
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            for note, search_text, emb in zip(notes, search_texts, embeddings):
+                cur.execute("DELETE FROM notes_fts WHERE note_id = ?", (note.id,))
+                cur.execute("""
+                INSERT INTO notes_fts(note_id, search_text)
+                VALUES (?, ?)
+                """, (note.id, search_text))
                 
+                if emb:
+                    cur.execute("SELECT rowid FROM notes WHERE id = ?", (note.id,))
+                    row = cur.fetchone()
+                    if row:
+                        note_rowid = row["rowid"]
+                        try:
+                            import sqlite_vec
+                            emb_bytes = sqlite_vec.serialize_float32(emb)
+                            cur.execute("DELETE FROM note_vectors WHERE rowid = ?", (note_rowid,))
+                            cur.execute("""
+                            INSERT INTO note_vectors(rowid, embedding)
+                            VALUES (?, ?)
+                            """, (note_rowid, emb_bytes))
+                        except Exception:
+                            pass
+            conn.commit()
+            
         return notes
 
     def get(self, note_id: str) -> Optional[PaperNote]:
@@ -270,19 +323,48 @@ class NoteStore:
     def update(self, note: PaperNote) -> PaperNote:
         """ノートを更新"""
         self._save_note(note)
-        self._update_chroma(note)
+        self._index_note(note)
         return note
 
     def delete(self, note_id: str) -> bool:
         """ノートを削除"""
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("DELETE FROM notes WHERE id = ?", (note_id,))
-            if cur.rowcount == 0:
+            cur.execute("SELECT rowid FROM notes WHERE id = ?", (note_id,))
+            row = cur.fetchone()
+            if not row:
                 return False
+            note_rowid = row["rowid"]
+            
+            cur.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+            cur.execute("DELETE FROM notes_fts WHERE note_id = ?", (note_id,))
+            cur.execute("DELETE FROM note_vectors WHERE rowid = ?", (note_rowid,))
             conn.commit()
             
-        self._delete_from_chroma(note_id)
+        return True
+
+    def add_link(self, source_id: str, target_id: str, reason: str = "") -> bool:
+        """指定したノート間にリンクを追加する"""
+        source = self.get(source_id)
+        if not source:
+            return False
+            
+        target = self.get(target_id)
+        if not target:
+            return False
+            
+        source.add_link(target_id, reason)
+        self.update(source)
+        return True
+
+    def remove_link(self, source_id: str, target_id: str) -> bool:
+        """指定したノート間のリンクを削除する"""
+        source = self.get(source_id)
+        if not source:
+            return False
+            
+        source.remove_link(target_id)
+        self.update(source)
         return True
 
     def _delete_extracted_markdown(self, pdf_path_str: str, title: str) -> None:
@@ -338,17 +420,21 @@ class NoteStore:
             cur.execute("SELECT id FROM notes WHERE paper_id = ?", (paper_id,))
             note_ids = [r["id"] for r in cur.fetchall()]
             
+            # FTS5 and note_vectors delete
+            if note_ids:
+                placeholders = ','.join('?' * len(note_ids))
+                cur.execute(f"DELETE FROM notes_fts WHERE note_id IN ({placeholders})", note_ids)
+                # We also need rowids for note_vectors
+                cur.execute("SELECT rowid FROM notes WHERE paper_id = ?", (paper_id,))
+                note_rowids = [r["rowid"] for r in cur.fetchall()]
+                if note_rowids:
+                    rowid_placeholders = ','.join('?' * len(note_rowids))
+                    cur.execute(f"DELETE FROM note_vectors WHERE rowid IN ({rowid_placeholders})", note_rowids)
+            
             cur.execute("DELETE FROM notes WHERE paper_id = ?", (paper_id,))
             cur.execute("DELETE FROM papers WHERE id = ?", (paper_id,))
             conn.commit()
-            
-        if note_ids:
-            collection = self._get_chroma_collection()
-            if collection:
-                try:
-                    collection.delete(ids=note_ids)
-                except Exception as e:
-                    print(f"⚠️ ChromaDBからの削除に失敗しました: {e}", file=sys.stderr)
+
                     
         self._delete_extracted_markdown(pdf_path, title)
         
@@ -577,38 +663,153 @@ class NoteStore:
             print(f"⚠️ クエリ補正に失敗しました: {e}", file=sys.stderr)
             return []
 
-    def _collect_vector_results(self, collection, query_texts, n_results, element_type_filter, distance_threshold):
-        collected = []
-        seen_ids = set()
+    def _hybrid_search(self, query: str, n_results: int, element_type_filter: Optional[str] = None) -> list[dict]:
+        """FTS5 と sqlite-vec によるハイブリッド検索を行い RRF で統合"""
+        from .gemini_client import embed_content_with_retry
+        
+        # 1. Generate query embedding
+        try:
+            embeddings = embed_content_with_retry(
+                model=EMBEDDING_MODEL,
+                contents=[query],
+                task_type="RETRIEVAL_QUERY"
+            )
+            query_emb = embeddings[0] if embeddings else None
+        except Exception as e:
+            print(f"⚠️ Query Embeddings API エラー: {e}", file=sys.stderr)
+            query_emb = None
 
-        for query_text in query_texts:
-            query_params = {
-                "query_texts": [query_text],
-                "n_results": min(n_results, self.get_stats()["total_notes"] or 1),
-            }
+        vec_ranks = {}
+        fts_ranks = {}
+        
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            
+            type_condition = ""
+            # Wrap query in double quotes to prevent FTS5 syntax errors with reserved keywords
+            escaped_query = query.replace('"', '""')
+            fts_query = f'"{escaped_query}"'
+            params_fts = [fts_query]
             if element_type_filter:
-                query_params["where"] = {"element_type": element_type_filter}
+                type_condition = "AND n.element_type = ?"
+                params_fts.append(element_type_filter)
+                
+            # FTS5 Search (Ranked)
+            cur.execute(f"""
+                SELECT f.note_id
+                FROM notes_fts f
+                JOIN notes n ON n.id = f.note_id
+                WHERE notes_fts MATCH ? {type_condition}
+                ORDER BY rank
+                LIMIT 50
+            """, params_fts)
+            for i, row in enumerate(cur.fetchall()):
+                fts_ranks[row["note_id"]] = i + 1
 
-            results = collection.query(**query_params)
-            if not results or not results.get("ids") or not results["ids"][0]:
-                continue
+            # Vector Search (sqlite-vec)
+            if query_emb:
+                try:
+                    import sqlite_vec
+                    query_emb_bytes = sqlite_vec.serialize_float32(query_emb)
+                    
+                    if element_type_filter:
+                        # Vector search with filter
+                        cur.execute("""
+                            SELECT n.id
+                            FROM note_vectors v
+                            JOIN notes n ON n.rowid = v.rowid
+                            WHERE v.embedding MATCH ? AND v.k = 50 AND n.element_type = ?
+                            ORDER BY v.distance
+                        """, (query_emb_bytes, element_type_filter))
+                    else:
+                        cur.execute("""
+                            SELECT n.id
+                            FROM note_vectors v
+                            JOIN notes n ON n.rowid = v.rowid
+                            WHERE v.embedding MATCH ? AND v.k = 50
+                            ORDER BY v.distance
+                        """, (query_emb_bytes,))
+                        
+                    for i, row in enumerate(cur.fetchall()):
+                        vec_ranks[row["id"]] = i + 1
+                except Exception as e:
+                    print(f"⚠️ sqlite-vec 検索エラー: {e}", file=sys.stderr)
 
-            for i, note_id in enumerate(results["ids"][0]):
-                distance = results["distances"][0][i] if results.get("distances") else None
-                if distance_threshold is not None and distance is not None and distance > distance_threshold:
-                    continue
-                if note_id in seen_ids:
-                    continue
-                seen_ids.add(note_id)
-                note = self.get(note_id)
-                if note:
-                    collected.append({
-                        "note": note.to_dict(),
-                        "distance": distance,
-                    })
+        # RRF (Reciprocal Rank Fusion) Calculation
+        k = 60
+        combined_scores = {}
+        all_ids = set(fts_ranks.keys()).union(set(vec_ranks.keys()))
+        for note_id in all_ids:
+            score = 0.0
+            if note_id in fts_ranks:
+                score += 1.0 / (k + fts_ranks[note_id])
+            if note_id in vec_ranks:
+                score += 1.0 / (k + vec_ranks[note_id])
+            combined_scores[note_id] = score
 
-        collected.sort(key=lambda item: item["distance"] if item["distance"] is not None else 1.0)
-        return collected[:n_results]
+        # Sort by RRF score descending
+        sorted_ids = sorted(combined_scores.keys(), key=lambda x: combined_scores[x], reverse=True)
+        top_candidates = sorted_ids[:max(n_results * 3, 30)] # Fetch more for reranking
+        
+        # Load notes
+        results = []
+        for note_id in top_candidates:
+            note = self.get(note_id)
+            if note:
+                results.append({
+                    "note": note.to_dict(),
+                    "distance": None, # Distance is replaced by score later
+                    "rrf_score": combined_scores[note_id]
+                })
+                
+        return results
+
+    def _rerank_with_llm(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+        """Gemini 3.1 Flash Lite を用いて検索結果をリランキングする"""
+        if not candidates:
+            return []
+            
+        from .gemini_client import generate_content_with_retry
+        from .ai_models import RERANK_MODEL
+        from .prompts import get_rerank_prompt
+        
+        # Prepare minimal JSON for LLM to save tokens
+        items_for_llm = []
+        for c in candidates:
+            n = c["note"]
+            items_for_llm.append({
+                "id": n["id"],
+                "content": str(n.get("content", ""))[:500], # truncate to fit
+                "context": str(n.get("context", ""))[:200]
+            })
+            
+        prompt = get_rerank_prompt(query, json.dumps(items_for_llm, ensure_ascii=False))
+        try:
+            response = generate_content_with_retry(
+                model=RERANK_MODEL,
+                contents=prompt
+            )
+            if not response or not response.text:
+                return candidates[:top_k]
+                
+            # Parse LLM response
+            raw_text = response.text.replace("```json", "").replace("```", "").strip()
+            scored_items = json.loads(raw_text)
+            
+            score_map = {str(item["id"]): float(item.get("score", 0)) for item in scored_items if "id" in item}
+            
+            # Update scores and sort
+            for c in candidates:
+                nid = str(c["note"]["id"])
+                # Fallback to RRF relative score if LLM missed it
+                c["llm_score"] = score_map.get(nid, 0.0)
+                
+            candidates.sort(key=lambda x: x.get("llm_score", 0.0), reverse=True)
+            return candidates[:top_k]
+            
+        except Exception as e:
+            print(f"⚠️ リランキングに失敗しました: {e}", file=sys.stderr)
+            return candidates[:top_k]
 
     def search(
         self,
@@ -619,49 +820,204 @@ class NoteStore:
         rewritten_queries: Optional[list[str]] = None,
         use_ai_rewrite: bool = False,
     ) -> dict:
-        """
-        セマンティック検索
-        
-        Args:
-            query: 検索クエリ
-            n_results: 最大取得件数（デフォルト: 10）
-            element_type_filter: 要素タイプによるフィルタ
-            distance_threshold: 距離の閾値（指定された場合、閾値以下のものを最大 n_results 件返します）
-            use_ai_rewrite: AIによるクエリ変換を利用するか
-        
-        Returns:
-            dict: {"results": list[dict], "method": "vector" | "keyword", "rewritten_queries": list[str]}
-        """
-        collection = self._get_chroma_collection()
         if rewritten_queries is None:
             rewritten_queries = self._rewrite_ambiguous_query(query) if use_ai_rewrite else []
         elif not use_ai_rewrite:
             rewritten_queries = []
 
-        if collection is None:
-            return {"results": self._keyword_search(query, n_results), "method": "keyword", "rewritten_queries": rewritten_queries}
-
         query_candidates = [query]
         if rewritten_queries:
             query_candidates = list(dict.fromkeys([query, *rewritten_queries]))
+            
+        all_candidates = []
+        for q in query_candidates:
+            # 1次検索: ハイブリッド検索(RRF)
+            res = self._hybrid_search(q, n_results, element_type_filter)
+            for r in res:
+                if not any(c["note"]["id"] == r["note"]["id"] for c in all_candidates):
+                    all_candidates.append(r)
+                    
+        # 2次検索: LLM リランキング
+        final_results = self._rerank_with_llm(query, all_candidates, n_results)
 
-        try:
-            output = self._collect_vector_results(
-                collection,
-                query_candidates,
-                n_results,
-                element_type_filter,
-                distance_threshold,
-            )
-        except Exception as e:
-            print(f"⚠️ ChromaDB検索エラー: {e}", file=sys.stderr)
-            return {"results": self._keyword_search(query, n_results), "method": "keyword", "rewritten_queries": rewritten_queries}
-
-        if not output:
+        if not final_results:
             print(f"ℹ️ セマンティック検索でヒットしなかったため、キーワード検索に切り替えます: {query}", file=sys.stderr)
             return {"results": self._keyword_search(query, n_results), "method": "keyword", "rewritten_queries": rewritten_queries}
 
-        return {"results": output, "method": "vector", "rewritten_queries": rewritten_queries}
+        return {"results": final_results, "method": "hybrid", "rewritten_queries": rewritten_queries}
+
+    def _keyword_search(self, query: str, n_results: int = 5) -> list[dict]:
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            escaped_query = query.replace('"', '""')
+            fts_query = f'"{escaped_query}"'
+            cur.execute("""
+                SELECT f.note_id
+                FROM notes_fts f
+                WHERE notes_fts MATCH ?
+                ORDER BY rank
+                LIMIT ?
+            """, (fts_query, n_results))
+            results = []
+            for row in cur.fetchall():
+                note = self.get(row["note_id"])
+                if note:
+                    results.append({"note": note.to_dict(), "distance": None})
+            return results
+
+
+    def find_neighbors(
+        self,
+        note_id: str,
+        n_results: int = 5,
+        element_type_filter: Optional[str] = None
+    ) -> list[dict]:
+        """指定したノートに類似するノートをベクトル検索で探す"""
+        note = self.get(note_id)
+        if not note:
+            return []
+
+        results = []
+        try:
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                
+                cur.execute("""
+                    SELECT v.rowid, v.embedding
+                    FROM note_vectors v
+                    JOIN notes n ON n.rowid = v.rowid
+                    WHERE n.id = ?
+                """, (note_id,))
+                row = cur.fetchone()
+                
+                if row and row["embedding"]:
+                    emb_bytes = row["embedding"]
+                    
+                    if element_type_filter:
+                        cur.execute("""
+                            SELECT n.id, v.distance
+                            FROM note_vectors v
+                            JOIN notes n ON n.rowid = v.rowid
+                            WHERE v.embedding MATCH ? AND v.k = ? AND n.element_type = ? AND n.id != ?
+                            ORDER BY v.distance
+                        """, (emb_bytes, n_results + 5, element_type_filter, note_id))
+                    else:
+                        cur.execute("""
+                            SELECT n.id, v.distance
+                            FROM note_vectors v
+                            JOIN notes n ON n.rowid = v.rowid
+                            WHERE v.embedding MATCH ? AND v.k = ? AND n.id != ?
+                            ORDER BY v.distance
+                        """, (emb_bytes, n_results + 5, note_id))
+                        
+                    for r in cur.fetchall():
+                        neighbor = self.get(r["id"])
+                        if neighbor:
+                            results.append({
+                                "note": neighbor.to_dict(),
+                                "distance": r["distance"]
+                            })
+                            if len(results) >= n_results:
+                                break
+        except Exception as e:
+            print(f"⚠️ sqlite-vec 検索エラー: {e}", file=sys.stderr)
+                            
+        if not results:
+            # Embeddingがない場合は、テキストからLLMで埋め込みを取得して検索
+            from .gemini_client import embed_content_with_retry
+            search_text = self._build_search_text(note)
+            try:
+                embeddings = embed_content_with_retry(
+                    model=EMBEDDING_MODEL,
+                    contents=[search_text],
+                    task_type="RETRIEVAL_QUERY"
+                )
+                if embeddings:
+                    query_emb = embeddings[0]
+                    import sqlite_vec
+                    emb_bytes = sqlite_vec.serialize_float32(query_emb)
+                    with self.db.get_connection() as conn:
+                        cur = conn.cursor()
+                        if element_type_filter:
+                            cur.execute("""
+                                SELECT n.id, v.distance
+                                FROM note_vectors v
+                                JOIN notes n ON n.rowid = v.rowid
+                                WHERE v.embedding MATCH ? AND v.k = ? AND n.element_type = ? AND n.id != ?
+                                ORDER BY v.distance
+                            """, (emb_bytes, n_results + 5, element_type_filter, note_id))
+                        else:
+                            cur.execute("""
+                                SELECT n.id, v.distance
+                                FROM note_vectors v
+                                JOIN notes n ON n.rowid = v.rowid
+                                WHERE v.embedding MATCH ? AND v.k = ? AND n.id != ?
+                                ORDER BY v.distance
+                            """, (emb_bytes, n_results + 5, note_id))
+                            
+                        for r in cur.fetchall():
+                            neighbor = self.get(r["id"])
+                            if neighbor:
+                                results.append({
+                                    "note": neighbor.to_dict(),
+                                    "distance": r["distance"]
+                                })
+                                if len(results) >= n_results:
+                                    break
+            except Exception as e:
+                print(f"⚠️ フォールバック検索エラー: {e}", file=sys.stderr)
+                        
+        return results
+
+    def _build_search_text(self, note: PaperNote) -> str:
+        """ノートの内容から検索用テキストを構築する"""
+        parts = []
+        if note.source_paper and note.source_paper.title:
+            parts.append(f"Title: {note.source_paper.title}")
+            if note.source_paper.authors:
+                parts.append(f"Authors: {', '.join(str(a) for a in note.source_paper.authors)}")
+                
+        parts.append(f"Type: {note.element_type}")
+        
+        if note.keywords:
+            parts.append(f"Keywords: {', '.join(str(k) for k in note.keywords)}")
+            
+        if isinstance(note.content, str):
+            parts.append(note.content)
+        elif isinstance(note.content, dict):
+            for k, v in note.content.items():
+                if isinstance(v, str):
+                    parts.append(f"{k}: {v}")
+                elif isinstance(v, list):
+                    parts.append(f"{k}: {', '.join(str(x) for x in v)}")
+                    
+        return "\n".join(parts)
+
+    def reindex(self, batch_size: int = 50) -> int:
+        """既存の全ノートから全文検索およびベクトル検索インデックスを再構築する"""
+        notes_list = self.list_all()
+        total = len(notes_list)
+        count = 0
+        import sys
+        
+        print(f"🔄 {total}件のノートを再インデックスします（バッチサイズ: {batch_size}）...", file=sys.stderr)
+        
+        # Clear existing indexes
+        with self.db.get_connection() as conn:
+            conn.execute("DELETE FROM notes_fts")
+            try:
+                conn.execute("DELETE FROM note_vectors")
+            except Exception:
+                pass
+            conn.commit()
+            
+        for i in range(0, total, batch_size):
+            batch = notes_list[i:i + batch_size]
+            self.add_batch(batch)
+            count += len(batch)
+            print(f"✅ {count}/{total} 件完了...", file=sys.stderr)
+                
+        return count
 
     def search_with_graph(
         self,
@@ -674,29 +1030,6 @@ class NoteStore:
         max_total: int = 100,
         use_ai_rewrite: bool = False,
     ) -> dict:
-        """
-        グラフ探索付きセマンティック検索
-
-        ベクトル検索の結果を起点に、ノート間リンクを BFS で辿り、
-        オプションで同一論文の他ノートも展開して返す。
-
-        Args:
-            query: 検索クエリ
-            n_results: ベクトル検索の初期取得件数（デフォルト: 10）
-            link_depth: リンクを遡るホップ数（デフォルト: 1, 0 で従来検索）
-            expand_paper: 同一論文の他ノートを展開するか（デフォルト: False）
-            distance_threshold: 距離の閾値
-            element_type_filter: 要素タイプによるフィルタ（ベクトル検索のみ）
-            max_total: 最大結果数の上限（デフォルト: 100）
-
-        Returns:
-            dict: {
-                "results": list[dict],  # 各要素に source, depth, linked_from, link_reason を含む
-                "method": "vector" | "keyword",
-                "graph_stats": {"direct_hits": int, "linked_notes": int, "paper_expanded": int}
-            }
-        """
-        # link_depth=0 かつ expand_paper=False の場合は従来の search() にフォールバック
         if link_depth <= 0 and not expand_paper:
             base_results = self.search(
                 query, n_results,
@@ -704,7 +1037,6 @@ class NoteStore:
                 distance_threshold=distance_threshold,
                 use_ai_rewrite=use_ai_rewrite,
             )
-            # 従来の結果に source/depth フィールドを付与して統一フォーマットに
             for r in base_results["results"]:
                 r["source"] = "direct"
                 r["depth"] = 0
@@ -715,7 +1047,6 @@ class NoteStore:
             }
             return base_results
 
-        # 1. ベクトル検索で初期ヒットを取得
         base_results = self.search(
             query, n_results,
             element_type_filter=element_type_filter,
@@ -725,11 +1056,10 @@ class NoteStore:
         rewritten_queries = base_results.get("rewritten_queries", [])
         method = base_results["method"]
 
-        # 統合結果: note_id -> result_dict のマッピング（重複排除用）
+        from typing import Dict, List
         seen: Dict[str, dict] = {}
         output: List[dict] = []
 
-        # 直接ヒットを登録
         for r in base_results["results"]:
             note_id = r["note"]["id"]
             entry = {
@@ -743,9 +1073,7 @@ class NoteStore:
             seen[note_id] = entry
             output.append(entry)
 
-        # 2. BFS でリンクを link_depth ホップまで辿る
         if link_depth > 0:
-            # BFS のフロンティア: (note_id, depth, linked_from_id)
             frontier = [(r["note"]["id"], 0) for r in base_results["results"]]
             visited = set(seen.keys())
 
@@ -758,7 +1086,6 @@ class NoteStore:
                     if len(output) >= max_total:
                         break
 
-                    # リンク先を取得（DB から直接取得して効率化）
                     linked_ids_with_reasons = self._get_linked_ids_with_reasons(parent_id)
 
                     for linked_id, reason in linked_ids_with_reasons:
@@ -784,10 +1111,8 @@ class NoteStore:
 
                 frontier = next_frontier
 
-        # 3. 同一論文の他ノートを展開
         paper_expanded_count = 0
         if expand_paper and len(output) < max_total:
-            # 直接ヒットした論文タイトルを収集
             paper_titles = set()
             for r in base_results["results"]:
                 sp = r["note"].get("source_paper", {})
@@ -814,7 +1139,6 @@ class NoteStore:
                     output.append(entry)
                     paper_expanded_count += 1
 
-        # 統計情報の集計
         direct_count = sum(1 for r in output if r["source"] == "direct")
         linked_count = sum(1 for r in output if r["source"] == "linked")
 
@@ -829,298 +1153,23 @@ class NoteStore:
             },
         }
 
-    def _get_linked_ids_with_reasons(self, note_id: str) -> List[tuple]:
-        """
-        指定ノートのリンク先IDとリンク理由を取得する（双方向）
-
-        Returns:
-            list[tuple]: [(linked_id, reason), ...]
-        """
-        results = []
+    def _get_linked_ids_with_reasons(self, note_id: str) -> list[tuple]:
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            # source_id → target_id 方向
-            cur.execute(
-                "SELECT target_id, reason FROM note_links WHERE source_id = ?",
-                (note_id,)
-            )
+            cur.execute("""
+                SELECT target_id, reason
+                FROM note_links
+                WHERE source_id = ?
+            """, (note_id,))
+            
+            results = {}
             for row in cur.fetchall():
-                reason = self._parse_maybe_json(row["reason"])
-                results.append((row["target_id"], reason))
-
-            # target_id → source_id 方向（双方向リンク対応）
-            cur.execute(
-                "SELECT source_id, reason FROM note_links WHERE target_id = ?",
-                (note_id,)
-            )
-            seen_ids = {r[0] for r in results}
-            for row in cur.fetchall():
-                if row["source_id"] not in seen_ids:
-                    reason = self._parse_maybe_json(row["reason"])
-                    results.append((row["source_id"], reason))
-
-        return results
-
-    def find_neighbors(self, note_id: str, n_results: int = 10, element_type_filter: Optional[str] = None) -> list[dict]:
-        """指定ノートの近傍ノートを検索"""
-        note = self.get(note_id)
-        if not note:
-            return []
-        search_text = self._build_search_text(note)
-        search_data = self.search(search_text, n_results + 1, element_type_filter=element_type_filter)
-        results = search_data["results"]
-        return [r for r in results if r["note"]["id"] != note_id][:n_results]
-
-    # ========================================
-    # リンク管理
-    # ========================================
-
-    def add_link(self, source_id: str, target_id: str, reason: str = "") -> bool:
-        """2つのノート間にリンクを追加（双方向）"""
-        source = self.get(source_id)
-        target = self.get(target_id)
-        if not source or not target:
-            return False
-
-        source.add_link(target_id, reason)
-        target.add_link(source_id, reason)
-        self._save_note(source)
-        self._save_note(target)
-        return True
-
-    def remove_link(self, source_id: str, target_id: str) -> bool:
-        """2つのノート間のリンクを削除（双方向）"""
-        source = self.get(source_id)
-        target = self.get(target_id)
-        if not source or not target:
-            return False
-
-        source.remove_link(target_id)
-        target.remove_link(source_id)
-        self._save_note(source)
-        self._save_note(target)
-        return True
-
-    def get_linked_notes(self, note_id: str) -> list[PaperNote]:
-        """リンクされたノートを取得"""
-        note = self.get(note_id)
-        if not note:
-            return []
-        return [n for lid in note.links if (n := self.get(lid)) is not None]
-
-    def list_pdfs(self) -> list[str]:
-        """pdf/ ディレクトリ内のPDFファイル一覧を返す"""
-        pdf_dir = self.base_dir / "pdf"
-        if not pdf_dir.exists():
-            return []
-        return [f.name for f in pdf_dir.glob("*.pdf")]
-
-    def reindex(self, batch_size: int = 50) -> int:
-        """既存の全ノートからChromaDBインデックスを再構築する"""
-        collection = self._get_chroma_collection()
-        if collection is None:
-            raise RuntimeError("ChromaDB collection is not available.")
-        
-        notes_list = self.list_all()
-        total = len(notes_list)
-        count = 0
-        
-        print(f"🔄 {total}件のノートを再インデックスします（バッチサイズ: {batch_size}）...", file=sys.stderr)
-        
-        for i in range(0, total, batch_size):
-            batch = notes_list[i:i + batch_size]
-            
-            ids = [n.id for n in batch]
-            documents = [self._build_search_text(n) for n in batch]
-            metadatas = [{
-                "element_type": n.element_type,
-                "paper_title": n.source_paper.title,
-                "timestamp": n.timestamp,
-            } for n in batch]
-            
-            try:
-                self._upsert_with_retry(
-                    collection,
-                    ids=ids,
-                    documents=documents,
-                    metadatas=metadatas
-                )
-                count += len(batch)
-                print(f"✅ {count}/{total} 件完了...", file=sys.stderr)
-                
-                if i + batch_size < total:
-                    # レート制限を考慮して少し待機
-                    time.sleep(2) 
-            except Exception as e:
-                print(f"❌ バッチ処理中に致命的なエラーが発生しました（インデックス {i}）: {e}", file=sys.stderr)
-                # 再インデックス時は一部失敗しても続行せず、問題を報告する
-                raise e
-                
-        return count
-
-    # ========================================
-    # 内部メソッド: ChromaDB
-    # ========================================
-
-    def _get_chroma_collection(self):
-        if self._chroma_collection is not None:
-            return self._chroma_collection
-
-        try:
-            import chromadb
-            import chromadb.utils.embedding_functions as embedding_functions
-            
-            try:
-                pass
-            except ImportError:
-                pass
-
-            db_path = str(self.base_dir / ".chromadb")
-            self._chroma_client = chromadb.PersistentClient(path=db_path)
-            class GeminiEmbeddingFunction(embedding_functions.EmbeddingFunction):
-                def __init__(self, api_key: str, model_name: str):
-                    self.api_key = api_key
-                    self.model_name = model_name if model_name.startswith('models/') else f'models/{model_name}'
-                def __call__(self, input: chromadb.Documents) -> chromadb.Embeddings:
-                    from .gemini_client import embed_content_with_retry
-                    return embed_content_with_retry(
-                        model=self.model_name,
-                        contents=input,
-                        task_type="RETRIEVAL_DOCUMENT",
-                        max_retries=3
-                    )
-            
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if api_key:
-                gemini_ef = GeminiEmbeddingFunction(
-                    api_key=api_key,
-                    model_name=EMBEDDING_MODEL
-                )
-                self._chroma_collection = self._chroma_client.get_or_create_collection(
-                    name="paper_notes_gemini2",
-                    embedding_function=gemini_ef,
-                    metadata={"hnsw:space": "cosine"},
-                )
-            else:
-                self._chroma_collection = self._chroma_client.get_or_create_collection(
-                    name="paper_notes",
-                    metadata={"hnsw:space": "cosine"},
-                )
-            return self._chroma_collection
-        except ImportError:
-            print("⚠️ chromadbがインストールされていません。キーワード検索にフォールバックします。", file=sys.stderr)
-            return None
-        except Exception as e:
-            print(f"⚠️ ChromaDB初期化エラー: {e}", file=sys.stderr)
-            return None
-
-    def _build_search_text(self, note: PaperNote) -> str:
-        parts = []
-        if isinstance(note.content, dict):
-            parts.extend(str(v) for v in note.content.values() if v)
-        elif note.content:
-            parts.append(str(note.content))
-            
-        if note.keywords:
-            keyword_list = []
-            for kw in note.keywords:
-                if isinstance(kw, dict):
-                    keyword_list.extend(str(v) for v in kw.values() if v)
+                target_id = row["target_id"]
+                reason = row["reason"]
+                if target_id not in results:
+                    results[target_id] = (target_id, reason)
                 else:
-                    keyword_list.append(str(kw))
-            parts.append("Keywords: " + ", ".join(keyword_list))
-            
-        if isinstance(note.context, dict):
-            parts.extend("Context: " + str(v) for v in note.context.values() if v)
-        elif note.context:
-            parts.append("Context: " + str(note.context))
-            
-        if note.tags:
-            tag_list = []
-            for tag in note.tags:
-                if isinstance(tag, dict):
-                    tag_list.extend(str(v) for v in tag.values() if v)
-                else:
-                    tag_list.append(str(tag))
-            parts.append("Tags: " + ", ".join(tag_list))
-        return " ".join(parts)
-
-    def _add_to_chroma(self, note: PaperNote) -> None:
-        collection = self._get_chroma_collection()
-        if collection is None:
-            raise RuntimeError("ChromaDB is not initialized.")
-        
-        search_text = self._build_search_text(note)
-        self._upsert_with_retry(
-            collection,
-            ids=[note.id],
-            documents=[search_text],
-            metadatas=[{
-                "element_type": note.element_type,
-                "paper_title": note.source_paper.title,
-                "timestamp": note.timestamp,
-            }],
-        )
-
-    def _upsert_with_retry(self, collection, ids, documents, metadatas, max_retries=3):
-        """リトライ機能付きの upsert"""
-        last_exception = None
-        for attempt in range(max_retries):
-            try:
-                collection.upsert(
-                    ids=ids,
-                    documents=documents,
-                    metadatas=metadatas
-                )
-                return
-            except Exception as e:
-                last_exception = e
-                # 429 (Rate Limit) の場合は待機してリトライ
-                if "429" in str(e) or "quota" in str(e).lower():
-                    wait_time = (attempt + 1) * 10
-                    print(f"⚠️ レート制限に達しました。{wait_time}秒後にリトライします ({attempt + 1}/{max_retries})...", file=sys.stderr)
-                    time.sleep(wait_time)
-                else:
-                    # その他のエラーは即時レイズ
-                    raise e
-        
-        raise last_exception
-
-    def _update_chroma(self, note: PaperNote) -> None:
-        self._add_to_chroma(note)
-
-    def _delete_from_chroma(self, note_id: str) -> None:
-        collection = self._get_chroma_collection()
-        if collection is None:
-            return
-        try:
-            collection.delete(ids=[note_id])
-        except Exception as e:
-            print(f"⚠️ ChromaDB削除エラー: {e}", file=sys.stderr)
-
-    # ========================================
-    # フォールバック: キーワード検索
-    # ========================================
-
-    def _keyword_search(self, query: str, n_results: int = 5) -> list[dict]:
-        query_lower = query.lower()
-        scored = []
-        for note in self.list_all():
-            score = 0
-            text = self._build_search_text(note).lower()
-            for word in query_lower.split():
-                if word in text:
-                    score += text.count(word)
-            if score > 0:
-                scored.append((score, note))
-
-        scored.sort(key=lambda x: x[0], reverse=True)
-        results = []
-        for score, note in scored[:n_results]:
-            note.record_access()
-            self._save_note(note)
-            results.append({
-                "note": note.to_dict(),
-                "distance": None,
-            })
-        return results
+                    if reason and not results[target_id][1]:
+                        results[target_id] = (target_id, reason)
+                        
+            return list(results.values())

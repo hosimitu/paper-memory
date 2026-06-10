@@ -115,6 +115,13 @@ class App {
                     ${i18n.t('search.method.vector')}
                 </span>
             `;
+        } else if (method === 'hybrid') {
+            return `
+                <span class="method-badge hybrid" title="${i18n.t('search.method.hybrid')}">
+                    <i data-lucide="layers"></i>
+                    ${i18n.t('search.method.hybrid')}
+                </span>
+            `;
         } else {
             return `
                 <span class="method-badge keyword" title="${i18n.t('search.method.keyword')}">

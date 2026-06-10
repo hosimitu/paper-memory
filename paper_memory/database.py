@@ -108,6 +108,14 @@ class Database:
     def get_connection(self) -> sqlite3.Connection:
         """SQLite 接続を取得（Dictのようにアクセスできる row_factory を設定）"""
         conn = sqlite3.connect(self.db_path)
+        try:
+            import sqlite_vec
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+        except ImportError:
+            pass # テスト時等 sqlite-vec がない場合のエラー回避
+
         conn.row_factory = sqlite3.Row
         # 外部キー制約を有効化
         conn.execute("PRAGMA foreign_keys = ON")
@@ -158,6 +166,25 @@ class Database:
                 PRIMARY KEY (source_id, target_id)
             )
             """)
+
+            # 全文検索 (FTS5) - trigramトークナイザーで日本語対応
+            conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+                note_id UNINDEXED,
+                search_text,
+                tokenize="trigram"
+            )
+            """)
+
+            # ベクトル検索 (sqlite-vec)
+            try:
+                conn.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS note_vectors USING vec0(
+                    embedding float[3072]
+                )
+                """)
+            except sqlite3.OperationalError as e:
+                print(f"⚠️ sqlite-vec の初期化をスキップしました: {e}")
 
             # 参考文献 (Reading List)
             conn.execute("""
