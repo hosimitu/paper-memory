@@ -11,7 +11,7 @@
       "relevance": "high",
       "reason": {
         "en": "Why this reference is critically important (in English)",
-        "local": "Why this reference is critically important (in the language specified by PAPER_MEMORY_LANGUAGE)"
+        "local": "Why this reference is critically important (in the language specified by DEFAULT_LANGUAGE in config.py)"
       },
       "keywords": [
         {

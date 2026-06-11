@@ -11,18 +11,18 @@
     {
       "content": {
         "en": "Text of the knowledge element (Summarized in English. MUST include important numerical values and specific methods)",
-        "local": "Translated summary in the language specified by PAPER_MEMORY_LANGUAGE"
+        "local": "Translated summary in the language specified by DEFAULT_LANGUAGE in config.py"
       },
       "element_type": "MUST be EXACTLY one of: background, method, result, discussion, conclusion, insight, limitation, future_work, definition, other",
       "keywords": [
         {
           "en": "keyword 1 (in English)",
-          "local": "keyword 1 (in PAPER_MEMORY_LANGUAGE)"
+          "local": "keyword 1 (in DEFAULT_LANGUAGE)"
         }
       ],
       "context": {
         "en": "Explanation of the context in which this knowledge element is important (in English)",
-        "local": "Explanation in the language specified by PAPER_MEMORY_LANGUAGE"
+        "local": "Explanation in the language specified by DEFAULT_LANGUAGE in config.py"
       },
       "tags": ["tag 1", "tag 2"]
     }

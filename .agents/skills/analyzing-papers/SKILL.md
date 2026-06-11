@@ -16,7 +16,7 @@ This revised version clarifies ambiguous constraints and defines explicit fallba
   1. Produce JSON that conforms to the schema exactly (see schema or minimal fallback below).
   2. Enforce exact `Type` string outputs; if no match, use `other`.
   3. If filesystem access exists, save JSON to `scratch/` as instructed; otherwise use the FILE fallback described below.
-  4. Always produce bilingual `local` fields based on the `.env` `local_language` setting.
+  4. Always produce bilingual `local` fields based on the `DEFAULT_LANGUAGE` setting in `paper_memory/config.py`.
 
 Additions in this file are explicitly marked as "CLARIFICATION" or "FALLBACK" where applicable.
 
@@ -99,12 +99,10 @@ FILE: scratch/new_notes.json
 ```
 
 **[CRITICAL BILINGUAL REQUIREMENT]** For fields defined as bilingual dictionaries (such as `content`, `context`, `keywords`, `reason`), produce both `"en"` and `"local"` keys.
-- Determining `local` language: Do **not** use `get-content` or equivalent file reads on `.env` because it may contain secrets such as `GEMINI_API_KEY`.
-- Prefer the `PAPER_MEMORY_LANGUAGE` environment variable if it is already set. If it is not set, default to `en`.
-- If a runtime setting file is needed, use a non-secret config file and never store API keys there.
+- Determining `local` language: Read `DEFAULT_LANGUAGE` from `paper_memory/config.py`.
 - Use the literal key name `local`; do not use ISO codes.
 - `en`: Always produce English text.
-- `local`: Produce text in the language specified by `PAPER_MEMORY_LANGUAGE` or `en` by default.
+- `local`: Produce text in the language specified by `DEFAULT_LANGUAGE` in `paper_memory/config.py` (e.g., `ja` or `en`).
 
 ### Quality Standards
 
