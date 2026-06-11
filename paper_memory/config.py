@@ -24,10 +24,10 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # デフォルト言語設定 ('en' or 'ja')
-DEFAULT_LANGUAGE = os.environ.get("PAPER_MEMORY_LANGUAGE", "ja")
+DEFAULT_LANGUAGE = "ja"
 
 # QA回答のMarkdown出力先ディレクトリ（プロジェクトルートからの相対パス）
-QA_OUTPUT_DIR = os.environ.get("PAPER_MEMORY_QA_OUTPUT_DIR", "qa_outputs")
+QA_OUTPUT_DIR = "qa_outputs"
 
 # 言語コードと自然言語名のマッピング
 LANG_MAP = {

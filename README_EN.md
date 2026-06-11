@@ -76,8 +76,8 @@ New-Item .env -ItemType File
 Add the following to `.env`:
 ```env
 GEMINI_API_KEY="your_api_key_here"
-PAPER_MEMORY_LANGUAGE="en"  # Default language (en or ja)
 ```
+*(If you want to change the default language or output directories, edit `paper_memory/config.py` directly.)*
 *(You can obtain an API key for free from [Google AI Studio](https://aistudio.google.com/app/apikey))*
 
 ### 3. Gemini CLI Installation (Required)

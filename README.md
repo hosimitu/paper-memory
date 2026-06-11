@@ -92,8 +92,8 @@ New-Item .env -ItemType File
 `.env` に以下を記述してください:
 ```env
 GEMINI_API_KEY="あなたのAPIキー"
-PAPER_MEMORY_LANGUAGE="ja"  # デフォルト言語 (ja または en)
 ```
+（言語設定や出力先を変更したい場合は `paper_memory/config.py` を直接編集してください。）
 
 ### 4. Gemini CLI のインストール (必須)
 論文の読み込みと解析のフロントエンドとして使用します。
