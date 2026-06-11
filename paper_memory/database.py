@@ -234,7 +234,8 @@ class Database:
                 search_method TEXT DEFAULT 'vector',
                 link_depth INTEGER DEFAULT 1,
                 expand_paper INTEGER DEFAULT 0,
-                n INTEGER DEFAULT 15
+                n INTEGER DEFAULT 15,
+                output_file TEXT
             )
             """)
 
@@ -251,6 +252,8 @@ class Database:
                 conn.execute("ALTER TABLE qa_history ADD COLUMN n INTEGER DEFAULT 15")
             if 'rewritten_query' not in columns:
                 conn.execute("ALTER TABLE qa_history ADD COLUMN rewritten_query TEXT")
+            if 'output_file' not in columns:
+                conn.execute("ALTER TABLE qa_history ADD COLUMN output_file TEXT")
 
             self._normalize_existing_reason_data(conn)
             conn.commit()
