@@ -55,6 +55,7 @@ references/*.json
 extracted/
 output/
 plan.md
+qa_outputs/
 
 # --- エディタ・OS ---
 .vscode/

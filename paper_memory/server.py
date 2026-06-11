@@ -27,7 +27,8 @@ from pathlib import Path
 from .store import NoteStore
 from .reference import ReferenceStore
 from .ai_models import QA_MODEL
-from .config import DEFAULT_LANGUAGE
+from .config import DEFAULT_LANGUAGE, QA_OUTPUT_DIR
+from .qa_formats import get_format, list_formats
 import datetime
 import re
 from PIL import Image
@@ -189,6 +190,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         elif path.startswith("/extracted/"):
             # extracted/ フォルダのMarkdownをプレーンテキストとして配信
             self.handle_extracted(path)
+        elif path.startswith(f"/{QA_OUTPUT_DIR}/"):
+            self.handle_qa_outputs(path)
         else:
             # 静的ファイル配信
             self.handle_static(path)
@@ -395,6 +398,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 data = {
                     "language": DEFAULT_LANGUAGE
                 }
+            elif path == "/api/qa/formats":
+                data = list_formats()
             else:
                 status = 404
                 data = {"error": "Endpoint not found"}
@@ -465,6 +470,32 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         if file_path.exists() and file_path.is_file():
             self.send_response(200)
             # Markdownはテキストとして配信することでブラウザが別タブでテキスト表示する
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            with open(file_path, "rb") as f:
+                self.wfile.write(f.read())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def handle_qa_outputs(self, path):
+        """qa_outputs/ ディレクトリのMarkdownをプレーンテキストとして配信"""
+        project_root = Path(__file__).parent.parent
+        qa_out_dir = (project_root / QA_OUTPUT_DIR).resolve()
+        
+        decoded_path = urllib.parse.unquote(path)
+        # e.g. path is "/qa_outputs/file.md", remove prefix
+        rel_path = decoded_path[len(f"/{QA_OUTPUT_DIR}/"):]
+        file_path = (qa_out_dir / rel_path).resolve()
+
+        if not str(file_path).startswith(str(qa_out_dir)):
+            self.send_response(403)
+            self.end_headers()
+            return
+
+        if file_path.exists() and file_path.is_file():
+            self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
@@ -622,6 +653,42 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         }
                     }
                     
+                    # Markdownファイルの保存
+                    format_id = post_data.get("format_id", "default")
+                    formatter = get_format(format_id)
+                    
+                    project_root = Path(__file__).parent.parent
+                    out_dir = project_root / QA_OUTPUT_DIR
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    md_filename = f"{timestamp_str}_{format_id}.md"
+                    md_path = out_dir / md_filename
+                    
+                    # フォーマット関数でMarkdown文字列を生成
+                    md_content = formatter(
+                        query_text,
+                        answer_text,
+                        references,
+                        {
+                            "timestamp": timestamp_str,
+                            "threshold": threshold,
+                            "search_method": search_method,
+                            "link_depth": link_depth,
+                            "expand_paper": expand_paper,
+                            "n": n_results,
+                            "rewritten_queries": search_data.get("rewritten_queries", [])
+                        }
+                    )
+                    
+                    with open(md_path, "w", encoding="utf-8") as f:
+                        f.write(md_content)
+                    
+                    # DBへの保存用相対パスを作成（/qa_outputs/xxxx.md）
+                    output_file_url = f"/{QA_OUTPUT_DIR}/{md_filename}"
+                    
+                    data["output_file"] = output_file_url
+
                     # 履歴に保存
                     store.add_qa_history(
                         query_text,
@@ -633,6 +700,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         expand_paper=expand_paper,
                         n=n_results,
                         rewritten_queries=search_data.get("rewritten_queries", []),
+                        output_file=output_file_url,
                     )
 
             elif path.startswith("/api/references/") and path.endswith("/status"):

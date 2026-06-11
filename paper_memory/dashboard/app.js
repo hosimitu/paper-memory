@@ -821,8 +821,8 @@ class App {
                         <div class="threshold-control">
                             <label for="qa-query-mode-select">${i18n.t('qa.rewrite_mode')}</label>
                             <select id="qa-query-mode-select" class="graph-select">
-                                <option value="ai" selected>${i18n.t('qa.rewrite_mode.ai')}</option>
-                                <option value="raw">${i18n.t('qa.rewrite_mode.raw')}</option>
+                                <option value="ai">${i18n.t('qa.rewrite_mode.ai')}</option>
+                                <option value="raw" selected>${i18n.t('qa.rewrite_mode.raw')}</option>
                             </select>
                         </div>
                     </div>
@@ -945,6 +945,14 @@ class App {
                 const rewrittenQueries = Array.isArray(item.rewritten_queries) ? item.rewritten_queries.filter(Boolean) : [];
                 const rewrittenSummary = rewrittenQueries.length > 0 ? rewrittenQueries.join(' • ') : i18n.t('qa.result.no_rewritten');
 
+                const mdLink = item.output_file
+                    ? `<a href="${item.output_file}" target="_blank" rel="noopener noreferrer"
+                        onclick="event.stopPropagation()"
+                        style="display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 0.8rem; text-decoration: none;">
+                        <i data-lucide="file-text" style="width:14px; height:14px;"></i>Markdown
+                      </a>`
+                    : '';
+
                 const div = document.createElement('div');
                 div.className = 'qa-history-item';
                 div.innerHTML = `
@@ -953,9 +961,12 @@ class App {
                             <i data-lucide="message-circle" style="width:16px; flex-shrink: 0;"></i>
                             <span>${item.query}</span>
                         </div>
-                        <button class="delete-history-btn" title="削除">
-                            <i data-lucide="trash-2" style="width:16px; height:16px;"></i>
-                        </button>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            ${mdLink}
+                            <button class="delete-history-btn" title="削除">
+                                <i data-lucide="trash-2" style="width:16px; height:16px;"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="qa-history-answer">${item.answer}</div>
                     <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.9rem; flex-wrap: wrap;">
@@ -990,7 +1001,7 @@ class App {
                 div.onclick = () => {
                     // 履歴をクリックしたら結果エリアに再表示
                     const resultsArea = document.getElementById('qa-results');
-                    this.displayQAResult(item.query, item.answer, item.references, resultsArea, item.search_method, null, rewrittenQueries);
+                    this.displayQAResult(item.query, item.answer, item.references, resultsArea, item.search_method, null, rewrittenQueries, item.output_file || null);
                     document.getElementById('qa-input').value = item.query;
                     document.getElementById('qa-threshold-slider').value = item.threshold;
                     document.getElementById('qa-threshold-display').innerText = item.threshold;
@@ -1026,7 +1037,7 @@ class App {
         }
     }
 
-    displayQAResult(query, answer, references, resultsArea, searchMethod = 'vector', graphStats = null, rewrittenQueries = []) {
+    displayQAResult(query, answer, references, resultsArea, searchMethod = 'vector', graphStats = null, rewrittenQueries = [], outputFile = null) {
         const dedentedAnswer = (str) => {
             const lines = str.split('\n');
             const firstNonEmptyLine = lines.find(l => l.trim().length > 0);
@@ -1059,6 +1070,11 @@ class App {
                         </div>
                         ${this.getMethodBadgeHtml(searchMethod)}
                         ${statsHtml}
+                        ${outputFile ? `
+                        <a href="${outputFile}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(var(--accent-rgb), 0.1); border-radius: 12px; font-size: 0.85rem; color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.2); text-decoration: none;">
+                            <i data-lucide="file-text" style="width: 14px; height: 14px;"></i> Markdownを開く
+                        </a>
+                        ` : ''}
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.9rem; flex-wrap: wrap;">
                         <i data-lucide="sparkles" style="width: 16px;"></i>
@@ -1126,7 +1142,7 @@ class App {
             }
 
             if (data.answer) {
-                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method, data.graph_stats, data.rewritten_queries || []);
+                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method, data.graph_stats, data.rewritten_queries || [], data.output_file || null);
                 this.loadQAHistory(); // 履歴を更新
             } else {
                 resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: 'No answer returned' })}</div>`;

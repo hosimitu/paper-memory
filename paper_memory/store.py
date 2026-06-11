@@ -514,13 +514,13 @@ class NoteStore:
     # QA履歴管理
     # ========================================
 
-    def add_qa_history(self, query: str, answer: str, references: list, threshold: float, search_method: str = "vector", link_depth: int = 1, expand_paper: bool = False, n: int = 15, rewritten_queries: Optional[list[str]] = None) -> None:
-        """QAのやり取りを履歴に保存し、10件を超えたら古いものを削除する"""
+    def add_qa_history(self, query: str, answer: str, references: list, threshold: float, search_method: str = "vector", link_depth: int = 1, expand_paper: bool = False, n: int = 15, rewritten_queries: Optional[list[str]] = None, output_file: Optional[str] = None) -> None:
+        """QAのやり取りを履歴に保存する"""
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-            INSERT INTO qa_history (query, answer, references_json, threshold, timestamp, search_method, link_depth, expand_paper, n, rewritten_query)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO qa_history (query, answer, references_json, threshold, timestamp, search_method, link_depth, expand_paper, n, rewritten_query, output_file)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 query,
                 answer,
@@ -532,6 +532,7 @@ class NoteStore:
                 1 if expand_paper else 0,
                 n,
                 json.dumps(rewritten_queries or [], ensure_ascii=False),
+                output_file,
             ))
             
             conn.commit()
@@ -569,6 +570,7 @@ class NoteStore:
                     "expand_paper": bool(row["expand_paper"]) if "expand_paper" in row.keys() else False,
                     "n": row["n"] if "n" in row.keys() else 15,
                     "rewritten_queries": rewritten_queries,
+                    "output_file": row["output_file"] if "output_file" in row.keys() else None,
                 })
             return history
 
