@@ -603,7 +603,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
 
                     from .prompts import get_qa_assistant_prompt
                     lang = post_data.get("lang", DEFAULT_LANGUAGE)
-                    prompt = get_qa_assistant_prompt(qa_context, query_text, lang)
+                    mode = post_data.get("mode", "fact")
+                    prompt = get_qa_assistant_prompt(qa_context, query_text, mode, lang)
 
                     # 3. LLM呼び出し
                     from .gemini_client import generate_content_with_retry
@@ -701,6 +702,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         n=n_results,
                         rewritten_queries=search_data.get("rewritten_queries", []),
                         output_file=output_file_url,
+                        mode=mode,
                     )
 
             elif path.startswith("/api/references/") and path.endswith("/status"):

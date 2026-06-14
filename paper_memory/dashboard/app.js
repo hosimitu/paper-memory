@@ -825,6 +825,13 @@ class App {
                                 <option value="raw" selected>${i18n.t('qa.rewrite_mode.raw')}</option>
                             </select>
                         </div>
+                        <div class="threshold-control">
+                            <label for="qa-mode-select">${i18n.t('qa.mode')}</label>
+                            <select id="qa-mode-select" class="graph-select">
+                                <option value="fact" selected>${i18n.t('qa.mode.fact')}</option>
+                                <option value="insight">${i18n.t('qa.mode.insight')}</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div id="qa-results" style="margin-top: 24px;"></div>
@@ -852,6 +859,7 @@ class App {
         const qaLinkDepthSelect = document.getElementById('qa-link-depth-select');
         const qaExpandPaperToggle = document.getElementById('qa-expand-paper-toggle');
         const qaQueryModeSelect = document.getElementById('qa-query-mode-select');
+        const qaModeSelect = document.getElementById('qa-mode-select');
 
         qaThresholdSlider.addEventListener('input', (e) => {
             qaThresholdDisplay.innerText = e.target.value;
@@ -866,6 +874,7 @@ class App {
             linkDepth: parseInt(qaLinkDepthSelect.value),
             expandPaper: qaExpandPaperToggle.checked,
             useAiRewrite: qaQueryModeSelect.value === 'ai',
+            mode: qaModeSelect.value,
         });
 
         const triggerQA = () => {
@@ -1015,6 +1024,9 @@ class App {
                     if (item.expand_paper !== undefined) {
                         document.getElementById('qa-expand-paper-toggle').checked = item.expand_paper;
                     }
+                    if (item.mode !== undefined) {
+                        document.getElementById('qa-mode-select').value = item.mode;
+                    }
                     resultsArea.scrollIntoView({ behavior: 'smooth' });
                 };
                 listArea.appendChild(div);
@@ -1114,6 +1126,7 @@ class App {
         const linkDepth = params.linkDepth !== undefined ? params.linkDepth : 1;
         const expandPaper = params.expandPaper || false;
         const useAiRewrite = params.useAiRewrite !== undefined ? params.useAiRewrite : true;
+        const mode = params.mode || 'fact';
 
         resultsArea.innerHTML = `
             <div class="loader-container" style="display:flex; flex-direction:column; gap:12px; align-items:center;">
@@ -1125,7 +1138,7 @@ class App {
             const res = await fetch(API_BASE + '/qa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, threshold, n, link_depth: linkDepth, expand_paper: expandPaper, use_ai_rewrite: useAiRewrite, lang: i18n.currentLang() })
+                body: JSON.stringify({ query, threshold, n, link_depth: linkDepth, expand_paper: expandPaper, use_ai_rewrite: useAiRewrite, lang: i18n.currentLang(), mode })
             });
 
             const data = await res.json();
