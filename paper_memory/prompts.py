@@ -109,13 +109,39 @@ def _format_qa_context(context) -> str:
     return "\n".join(lines).strip()
 
 
-def get_qa_assistant_prompt(context, query_text: str, lang: str = DEFAULT_LANGUAGE) -> str:
+def get_qa_assistant_prompt(context, query_text: str, mode: str = "fact", lang: str = DEFAULT_LANGUAGE) -> str:
     """
     [使用箇所 / Location] paper_memory/server.py -> handle_api_post()
     [用途 / Purpose] ダッシュボードのQA機能で、ノートの内容をもとに回答する / Provide answers based on note contents for the dashboard's QA feature
     """
     context_str = _format_qa_context(context)
     target_language = get_language_name(lang)
+
+    if mode == "insight":
+        return f"""You are a research assistant tasked with helping the user solve problems by finding connections and insights across different research notes.
+Answer the user's query in {target_language} based on the "Provided Knowledge Notes" below.
+
+## Output Rules (CRITICAL):
+1. Immediately before your answer, you MUST output a marker line: "===Answer Start===". Start your actual answer text from the next line.
+2. Synthesize the provided notes to find analogies, potential applications, or combinations of methods that could address the user's query.
+3. Suggest creative solutions or possibilities (e.g., "The method from Paper A could potentially be applied to solve the issue in Paper B because...") based on the provided notes.
+4. While you are encouraged to propose insights, do NOT bring in completely unrelated external facts or general knowledge that is not grounded in the notes. Your hypotheses must be logical extensions of the provided content.
+5. Append source citation numbers like [1], [2] to the relevant parts of your answer to show which notes inspired your ideas.
+6. Do NOT include a reference list at the end.
+7. The provided context is a knowledge graph. Leverage both explicit links and same-paper relations to draw connections.
+
+## Example Output:
+(Your thinking process can be placed here)
+===Answer Start===
+To improve polymer strength, we can consider applying the method described in [2] (which uses carbon nanotubes) to the polymer system in [1]. Since [1] details the synthesis of polyimide, incorporating the functionalization techniques from [2] might enhance tensile strength because...
+
+---
+[Provided Knowledge Notes]
+{context_str}
+
+[User Query]
+{query_text}
+"""
 
     return f"""You are a research assistant.
 Answer the user's query in {target_language} based ONLY on the "Provided Knowledge Notes" below.

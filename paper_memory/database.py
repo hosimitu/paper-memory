@@ -235,7 +235,8 @@ class Database:
                 link_depth INTEGER DEFAULT 1,
                 expand_paper INTEGER DEFAULT 0,
                 n INTEGER DEFAULT 15,
-                output_file TEXT
+                output_file TEXT,
+                mode TEXT DEFAULT 'fact'
             )
             """)
 
@@ -254,6 +255,8 @@ class Database:
                 conn.execute("ALTER TABLE qa_history ADD COLUMN rewritten_query TEXT")
             if 'output_file' not in columns:
                 conn.execute("ALTER TABLE qa_history ADD COLUMN output_file TEXT")
+            if 'mode' not in columns:
+                conn.execute("ALTER TABLE qa_history ADD COLUMN mode TEXT DEFAULT 'fact'")
 
             self._normalize_existing_reason_data(conn)
             conn.commit()
