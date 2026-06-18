@@ -27,7 +27,7 @@ import time
 import re
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 
 from .note import PaperNote, SourcePaper, normalize_reason
 from .database import Database
@@ -648,11 +648,13 @@ class NoteStore:
 
         return candidates
 
-    def _rewrite_ambiguous_query(self, query: str) -> list[str]:
+    def _rewrite_ambiguous_query(self, query: str, status_callback: Optional[Callable] = None) -> list[str]:
         if not query:
             return []
 
         try:
+            if status_callback:
+                status_callback("query_rewriting", "クエリの解析・拡張中...")
             from .gemini_client import generate_content_with_retry
             prompt = get_search_rewrite_prompt(query)
             response = generate_content_with_retry(
@@ -667,8 +669,11 @@ class NoteStore:
             print(f"⚠️ クエリ補正に失敗しました: {e}", file=sys.stderr)
             return []
 
-    def _hybrid_search(self, query: str, n_results: int, element_type_filter: Optional[str] = None) -> list[dict]:
+    def _hybrid_search(self, query: str, n_results: int, element_type_filter: Optional[str] = None, status_callback: Optional[Callable] = None) -> list[dict]:
         """FTS5 と sqlite-vec によるハイブリッド検索を行い RRF で統合"""
+        if status_callback:
+            status_callback("searching", "関連ノートの検索中...", {"query": query})
+
         from .gemini_client import embed_content_with_retry
         
         # 1. Generate query embedding
@@ -768,8 +773,10 @@ class NoteStore:
                 
         return results
 
-    def _rerank_with_llm(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+    def _rerank_with_llm(self, query: str, candidates: list[dict], top_k: int, status_callback: Optional[Callable] = None) -> list[dict]:
         """Gemini 3.1 Flash Lite を用いて検索結果をリランキングする"""
+        if status_callback:
+            status_callback("reranking", "検索結果の再ランキング中...")
         if not candidates:
             return []
             
@@ -823,9 +830,10 @@ class NoteStore:
         distance_threshold: Optional[float] = None,
         rewritten_queries: Optional[list[str]] = None,
         use_ai_rewrite: bool = False,
+        status_callback: Optional[Callable] = None,
     ) -> dict:
         if rewritten_queries is None:
-            rewritten_queries = self._rewrite_ambiguous_query(query) if use_ai_rewrite else []
+            rewritten_queries = self._rewrite_ambiguous_query(query, status_callback=status_callback) if use_ai_rewrite else []
         elif not use_ai_rewrite:
             rewritten_queries = []
 
@@ -836,13 +844,13 @@ class NoteStore:
         all_candidates = []
         for q in query_candidates:
             # 1次検索: ハイブリッド検索(RRF)
-            res = self._hybrid_search(q, n_results, element_type_filter)
+            res = self._hybrid_search(q, n_results, element_type_filter, status_callback=status_callback)
             for r in res:
                 if not any(c["note"]["id"] == r["note"]["id"] for c in all_candidates):
                     all_candidates.append(r)
                     
         # 2次検索: LLM リランキング
-        final_results = self._rerank_with_llm(query, all_candidates, n_results)
+        final_results = self._rerank_with_llm(query, all_candidates, n_results, status_callback=status_callback)
 
         if not final_results:
             print(f"ℹ️ セマンティック検索でヒットしなかったため、キーワード検索に切り替えます: {query}", file=sys.stderr)
@@ -1033,6 +1041,7 @@ class NoteStore:
         element_type_filter: Optional[str] = None,
         max_total: int = 100,
         use_ai_rewrite: bool = False,
+        status_callback: Optional[Callable] = None,
     ) -> dict:
         if link_depth <= 0 and not expand_paper:
             base_results = self.search(
@@ -1040,6 +1049,7 @@ class NoteStore:
                 element_type_filter=element_type_filter,
                 distance_threshold=distance_threshold,
                 use_ai_rewrite=use_ai_rewrite,
+                status_callback=status_callback,
             )
             for r in base_results["results"]:
                 r["source"] = "direct"
@@ -1056,6 +1066,7 @@ class NoteStore:
             element_type_filter=element_type_filter,
             distance_threshold=distance_threshold,
             use_ai_rewrite=use_ai_rewrite,
+            status_callback=status_callback,
         )
         rewritten_queries = base_results.get("rewritten_queries", [])
         method = base_results["method"]
@@ -1078,6 +1089,8 @@ class NoteStore:
             output.append(entry)
 
         if link_depth > 0:
+            if status_callback:
+                status_callback("graph_expansion", "関連ノートのネットワーク拡張中...")
             frontier = [(r["note"]["id"], 0) for r in base_results["results"]]
             visited = set(seen.keys())
 

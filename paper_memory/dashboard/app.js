@@ -1128,43 +1128,111 @@ class App {
         const useAiRewrite = params.useAiRewrite !== undefined ? params.useAiRewrite : true;
         const mode = params.mode || 'fact';
 
-        resultsArea.innerHTML = `
-            <div class="loader-container" style="display:flex; flex-direction:column; gap:12px; align-items:center;">
-                <div class="loader"></div>
-                <div style="color:var(--text-light); font-size:0.9rem;">${i18n.t('qa.generating', { threshold })}</div>
-            </div>`;
+        // 進捗ステップの定義（将来のフェーズ追加はここに行を追加するだけ）
+        const STEPS = [
+            { key: 'query_rewriting', label: () => i18n.t('qa.progress.query_rewriting'), icon: '✦', visible: useAiRewrite },
+            { key: 'searching',       label: () => i18n.t('qa.progress.searching', { threshold }), icon: '⊛' },
+            { key: 'reranking',       label: () => i18n.t('qa.progress.reranking'), icon: '⊕' },
+            { key: 'graph_expansion', label: () => i18n.t('qa.progress.graph_expansion'), icon: '⊗', visible: linkDepth > 0 },
+            { key: 'generating_answer', label: () => i18n.t('qa.progress.generating_answer'), icon: '★' },
+            { key: 'saving',          label: () => i18n.t('qa.progress.saving'), icon: '✓' },
+        ].filter(s => s.visible !== false);
+
+        // プログレスUIを描画
+        const renderProgress = (activeKey) => {
+            const stepsHtml = STEPS.map((s, idx) => {
+                const isDone = STEPS.findIndex(x => x.key === activeKey) > idx;
+                const isActive = s.key === activeKey;
+                const cls = isDone ? 'done' : isActive ? 'active' : '';
+                const iconContent = isDone ? '✔' : s.icon;
+                return `<div class="qa-progress-step ${cls}" id="qa-step-${s.key}">
+                    <div class="qa-step-icon">${iconContent}</div>
+                    <div class="qa-step-label">${s.label()}</div>
+                </div>`;
+            }).join('');
+
+            resultsArea.innerHTML = `
+                <div class="qa-progress-container">
+                    <div class="qa-progress-spinner"></div>
+                    <div class="qa-progress-steps">${stepsHtml}</div>
+                </div>`;
+        };
+
+        // 最初のステップでUIを初期化
+        const firstStep = useAiRewrite ? 'query_rewriting' : 'searching';
+        renderProgress(firstStep);
 
         try {
-            const res = await fetch(API_BASE + '/qa', {
+            const response = await fetch(API_BASE + '/qa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query, threshold, n, link_depth: linkDepth, expand_paper: expandPaper, use_ai_rewrite: useAiRewrite, lang: i18n.currentLang(), mode })
             });
 
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || `HTTP error! status: ${res.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            if (data.error) throw new Error(data.error);
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
 
-            // レート制限表示の更新
-            if (data.api_usage) {
-                const badge = document.getElementById('qa-rate-limit');
-                if (badge) badge.innerText = `${i18n.t('qa.rate_limit').split(':')[0]}: ${data.api_usage.used} / ${data.api_usage.limit} RPM`;
-            }
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-            if (data.answer) {
-                this.displayQAResult(query, data.answer, data.references || [], resultsArea, data.search_method, data.graph_stats, data.rewritten_queries || [], data.output_file || null);
-                this.loadQAHistory(); // 履歴を更新
-            } else {
-                resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: 'No answer returned' })}</div>`;
+                buffer += decoder.decode(value, { stream: true });
+
+                // SSEのチャンクを行単位でパース
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // 末尾の未完成行はバッファに残す
+
+                let currentEvent = null;
+                let currentData = null;
+
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        currentEvent = line.slice(7).trim();
+                    } else if (line.startsWith('data: ')) {
+                        currentData = line.slice(6).trim();
+                    } else if (line === '' && currentEvent && currentData) {
+                        // イベント完成
+                        try {
+                            const payload = JSON.parse(currentData);
+
+                            if (currentEvent === 'progress') {
+                                renderProgress(payload.step);
+                            } else if (currentEvent === 'complete') {
+                                // レート制限表示の更新
+                                if (payload.api_usage) {
+                                    const badge = document.getElementById('qa-rate-limit');
+                                    if (badge) badge.innerText = `${i18n.t('qa.rate_limit').split(':')[0]}: ${payload.api_usage.used} / ${payload.api_usage.limit} RPM`;
+                                }
+
+                                if (payload.answer) {
+                                    this.displayQAResult(query, payload.answer, payload.references || [], resultsArea, payload.search_method, payload.graph_stats, payload.rewritten_queries || [], payload.output_file || null);
+                                    this.loadQAHistory();
+                                } else {
+                                    resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: 'No answer returned' })}</div>`;
+                                }
+                            } else if (currentEvent === 'error') {
+                                throw new Error(payload.error || 'Unknown error');
+                            }
+                        } catch (parseErr) {
+                            // JSONパース失敗は無視
+                        }
+
+                        currentEvent = null;
+                        currentData = null;
+                    }
+                }
             }
         } catch (err) {
             resultsArea.innerHTML = `<div class="error-msg">${i18n.t('error.alert', { message: err.message })}</div>`;
         }
         lucide.createIcons();
     }
+
 
     async executeSearch(query, resultsArea, params = {}) {
         if (!query || !query.trim()) return;

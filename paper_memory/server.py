@@ -538,172 +538,195 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     status_code = 400
                     data = {"error": "Query is required"}
                 else:
-                    # 1. グラフ探索付き検索を実行
-                    threshold = post_data.get("threshold", 0.45)
-                    n_results = post_data.get("n", 15)
-                    link_depth = post_data.get("link_depth", 1)
-                    expand_paper = post_data.get("expand_paper", False)
-                    use_ai_rewrite = post_data.get("use_ai_rewrite", True)
-                    if isinstance(use_ai_rewrite, str):
-                        use_ai_rewrite = use_ai_rewrite.lower() == "true"
-                    else:
-                        use_ai_rewrite = bool(use_ai_rewrite)
-                    
-                    search_data = store.search_with_graph(
-                        query_text,
-                        n_results=n_results,
-                        link_depth=link_depth,
-                        expand_paper=expand_paper,
-                        distance_threshold=threshold,
-                        use_ai_rewrite=use_ai_rewrite,
-                    )
-                    search_results = search_data["results"]
-                    search_method = search_data["method"]
-                    graph_stats = search_data.get("graph_stats", {})
-                    
-                    if not search_results:
-                        # 関連ノートが見つからない場合は、AIへのプロンプト送信を中断してユーザーに通知する
-                        data = {
-                            "answer": f"指定された閾値（{threshold}）では関連する知識ノートが見つかりませんでした。閾値を上げて再試行するか、質問内容を変えてみてください。",
-                            "references": [],
-                            "status": "no_context"
-                        }
-                        # ここで処理を終了し、下の共通レスポンス送信へ進む
-                        self.send_response(200)
-                        self.send_header("Content-Type", "application/json; charset=utf-8")
-                        self.send_header("Access-Control-Allow-Origin", "*")
-                        self.end_headers()
-                        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
-                        return
-                    
-                    # 2. プロンプト構築（リンク経由ノートの理由を注入）
-                    references = []
-                    for i, res in enumerate(search_results):
-                        note = res["note"]
-                        title = note["source_paper"]["title"]
-                        note_id = note["id"]
-                        ref_num = i + 1
-                        source = res.get("source", "direct")
+                    # SSEストリーミングレスポンスとして処理
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
 
-                        references.append({
-                            "id": ref_num,
-                            "title": title,
-                            "note_id": note_id,
-                            "source": source,
-                            "depth": res.get("depth", 0),
+                    def send_sse(event_type: str, payload: dict):
+                        """SSEイベントをフラッシュして送信するヘルパー関数"""
+                        try:
+                            line = f"event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                            self.wfile.write(line.encode("utf-8"))
+                            self.wfile.flush()
+                        except Exception:
+                            pass
+
+                    def status_callback(step: str, message: str, extra: dict = None):
+                        """処理フェーズの進捗をSSEで送信するコールバック"""
+                        payload = {"step": step, "message": message}
+                        if extra:
+                            payload.update(extra)
+                        send_sse("progress", payload)
+
+                    try:
+                        # 1. パラメータ取得
+                        threshold = post_data.get("threshold", 0.45)
+                        n_results = post_data.get("n", 15)
+                        link_depth = post_data.get("link_depth", 1)
+                        expand_paper = post_data.get("expand_paper", False)
+                        use_ai_rewrite = post_data.get("use_ai_rewrite", True)
+                        if isinstance(use_ai_rewrite, str):
+                            use_ai_rewrite = use_ai_rewrite.lower() == "true"
+                        else:
+                            use_ai_rewrite = bool(use_ai_rewrite)
+
+                        # 2. グラフ探索付き検索を実行（各フェーズでコールバックを呼ぶ）
+                        if not use_ai_rewrite:
+                            status_callback("searching", "関連ノートの検索中...", {"threshold": threshold})
+                        search_data = store.search_with_graph(
+                            query_text,
+                            n_results=n_results,
+                            link_depth=link_depth,
+                            expand_paper=expand_paper,
+                            distance_threshold=threshold,
+                            use_ai_rewrite=use_ai_rewrite,
+                            status_callback=status_callback,
+                        )
+                        search_results = search_data["results"]
+                        search_method = search_data["method"]
+                        graph_stats = search_data.get("graph_stats", {})
+
+                        if not search_results:
+                            # 関連ノートが見つからない場合
+                            send_sse("complete", {
+                                "answer": f"指定された閾値（{threshold}）では関連する知識ノートが見つかりませんでした。閾値を上げて再試行するか、質問内容を変えてみてください。",
+                                "references": [],
+                                "status": "no_context"
+                            })
+                            return
+
+                        # 3. プロンプト構築（リンク経由ノートの理由を注入）
+                        references = []
+                        for i, res in enumerate(search_results):
+                            note = res["note"]
+                            title = note["source_paper"]["title"]
+                            note_id = note["id"]
+                            ref_num = i + 1
+                            source = res.get("source", "direct")
+                            references.append({
+                                "id": ref_num,
+                                "title": title,
+                                "note_id": note_id,
+                                "source": source,
+                                "depth": res.get("depth", 0),
+                            })
+
+                        qa_context = build_qa_context_payload(
+                            search_results,
+                            query_text,
+                            search_method,
+                            link_depth,
+                            expand_paper,
+                        )
+
+                        from .prompts import get_qa_assistant_prompt
+                        lang = post_data.get("lang", DEFAULT_LANGUAGE)
+                        mode = post_data.get("mode", "fact")
+                        prompt = get_qa_assistant_prompt(qa_context, query_text, mode, lang)
+
+                        # 4. LLM呼び出し
+                        status_callback("generating_answer", "AIによる最終回答を生成中...")
+                        from .gemini_client import generate_content_with_retry
+
+                        api_key = os.environ.get("GEMINI_API_KEY")
+                        if not api_key:
+                            raise ValueError("GEMINI_API_KEY is not set.")
+
+                        # リクエスト履歴を記録
+                        global API_USAGE_LOG
+                        API_USAGE_LOG.append(datetime.datetime.now())
+
+                        response = generate_content_with_retry(model=QA_MODEL, contents=prompt, max_retries=1)
+
+                        # 5. 後処理（思考プロセスのカット）
+                        answer_text = response.text
+                        if "===Answer Start===" in answer_text:
+                            answer_text = answer_text.split("===Answer Start===")[-1].strip()
+                        elif "===回答開始===" in answer_text:
+                            # 互換性のため残す
+                            answer_text = answer_text.split("===回答開始===")[-1].strip()
+                        elif "提供された情報に" in answer_text:
+                            parts = answer_text.split("提供された情報に", 1)
+                            if len(parts) > 1:
+                                answer_text = "提供された情報に" + parts[1]
+                        elif "Based on the provided information" in answer_text:
+                            parts = answer_text.split("Based on the provided information", 1)
+                            if len(parts) > 1:
+                                answer_text = "Based on the provided information" + parts[1]
+
+                        # 引用文献リストの強制カット
+                        if "📚 引用文献" in answer_text:
+                            answer_text = answer_text.split("📚 引用文献")[0].strip()
+                        elif "引用文献" in answer_text:
+                            answer_text = answer_text.split("引用文献")[0].strip()
+
+                        # 6. Markdown保存・履歴登録
+                        status_callback("saving", "回答の保存と履歴の記録中...")
+                        format_id = post_data.get("format_id", "default")
+                        formatter = get_format(format_id)
+
+                        project_root = Path(__file__).parent.parent
+                        out_dir = project_root / QA_OUTPUT_DIR
+                        out_dir.mkdir(parents=True, exist_ok=True)
+
+                        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        md_filename = f"{timestamp_str}_{format_id}.md"
+                        md_path = out_dir / md_filename
+
+                        md_content = formatter(
+                            query_text,
+                            answer_text,
+                            references,
+                            {
+                                "timestamp": timestamp_str,
+                                "threshold": threshold,
+                                "search_method": search_method,
+                                "link_depth": link_depth,
+                                "expand_paper": expand_paper,
+                                "n": n_results,
+                                "rewritten_queries": search_data.get("rewritten_queries", [])
+                            }
+                        )
+
+                        with open(md_path, "w", encoding="utf-8") as f:
+                            f.write(md_content)
+
+                        output_file_url = f"/{QA_OUTPUT_DIR}/{md_filename}"
+
+                        store.add_qa_history(
+                            query_text,
+                            answer_text,
+                            references,
+                            threshold,
+                            search_method=search_method,
+                            link_depth=link_depth,
+                            expand_paper=expand_paper,
+                            n=n_results,
+                            rewritten_queries=search_data.get("rewritten_queries", []),
+                            output_file=output_file_url,
+                            mode=mode,
+                        )
+
+                        # 7. 完了イベント送信
+                        send_sse("complete", {
+                            "answer": answer_text,
+                            "references": references,
+                            "search_method": search_method,
+                            "graph_stats": graph_stats,
+                            "rewritten_queries": search_data.get("rewritten_queries", []),
+                            "output_file": output_file_url,
+                            "api_usage": {
+                                "used": update_api_usage(),
+                                "limit": API_LIMIT_RPM
+                            }
                         })
 
-                    qa_context = build_qa_context_payload(
-                        search_results,
-                        query_text,
-                        search_method,
-                        link_depth,
-                        expand_paper,
-                    )
-
-                    from .prompts import get_qa_assistant_prompt
-                    lang = post_data.get("lang", DEFAULT_LANGUAGE)
-                    mode = post_data.get("mode", "fact")
-                    prompt = get_qa_assistant_prompt(qa_context, query_text, mode, lang)
-
-                    # 3. LLM呼び出し
-                    from .gemini_client import generate_content_with_retry
-                    
-                    api_key = os.environ.get("GEMINI_API_KEY")
-                    if not api_key:
-                        raise ValueError("GEMINI_API_KEY is not set.")
-                    
-                    # リクエスト履歴を記録
-                    global API_USAGE_LOG
-                    API_USAGE_LOG.append(datetime.datetime.now())
-                    
-                    response = generate_content_with_retry(model=QA_MODEL, contents=prompt, max_retries=1)
-                    
-                    # 4. 後処理（思考プロセスのカット）
-                    answer_text = response.text
-                    if "===Answer Start===" in answer_text:
-                        answer_text = answer_text.split("===Answer Start===")[-1].strip()
-                    elif "===回答開始===" in answer_text:
-                        # 互換性のため残す
-                        answer_text = answer_text.split("===回答開始===")[-1].strip()
-                    elif "提供された情報に" in answer_text:
-                        # マーカーがない場合のフォールバック（最初の日本語らしい文から）
-                        parts = answer_text.split("提供された情報に", 1)
-                        if len(parts) > 1:
-                            answer_text = "提供された情報に" + parts[1]
-                    elif "Based on the provided information" in answer_text:
-                        parts = answer_text.split("Based on the provided information", 1)
-                        if len(parts) > 1:
-                            answer_text = "Based on the provided information" + parts[1]
-                    
-                    # 引用文献リストの強制カット
-                    if "📚 引用文献" in answer_text:
-                        answer_text = answer_text.split("📚 引用文献")[0].strip()
-                    elif "引用文献" in answer_text:
-                        answer_text = answer_text.split("引用文献")[0].strip()
-                        
-                    data = {
-                        "answer": answer_text,
-                        "references": references,
-                        "search_method": search_method,
-                        "graph_stats": graph_stats,
-                        "rewritten_queries": search_data.get("rewritten_queries", []),
-                        "api_usage": {
-                            "used": update_api_usage(),
-                            "limit": API_LIMIT_RPM
-                        }
-                    }
-                    
-                    # Markdownファイルの保存
-                    format_id = post_data.get("format_id", "default")
-                    formatter = get_format(format_id)
-                    
-                    project_root = Path(__file__).parent.parent
-                    out_dir = project_root / QA_OUTPUT_DIR
-                    out_dir.mkdir(parents=True, exist_ok=True)
-                    
-                    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    md_filename = f"{timestamp_str}_{format_id}.md"
-                    md_path = out_dir / md_filename
-                    
-                    # フォーマット関数でMarkdown文字列を生成
-                    md_content = formatter(
-                        query_text,
-                        answer_text,
-                        references,
-                        {
-                            "timestamp": timestamp_str,
-                            "threshold": threshold,
-                            "search_method": search_method,
-                            "link_depth": link_depth,
-                            "expand_paper": expand_paper,
-                            "n": n_results,
-                            "rewritten_queries": search_data.get("rewritten_queries", [])
-                        }
-                    )
-                    
-                    with open(md_path, "w", encoding="utf-8") as f:
-                        f.write(md_content)
-                    
-                    # DBへの保存用相対パスを作成（/qa_outputs/xxxx.md）
-                    output_file_url = f"/{QA_OUTPUT_DIR}/{md_filename}"
-                    
-                    data["output_file"] = output_file_url
-
-                    # 履歴に保存
-                    store.add_qa_history(
-                        query_text,
-                        answer_text,
-                        references,
-                        threshold,
-                        search_method=search_method,
-                        link_depth=link_depth,
-                        expand_paper=expand_paper,
-                        n=n_results,
-                        rewritten_queries=search_data.get("rewritten_queries", []),
-                        output_file=output_file_url,
-                        mode=mode,
-                    )
+                    except Exception as qa_err:
+                        send_sse("error", {"error": str(qa_err)})
+                    return
 
             elif path.startswith("/api/references/") and path.endswith("/status"):
                 parts = path.strip("/").split("/")
