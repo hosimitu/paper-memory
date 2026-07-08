@@ -266,7 +266,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             # --- 論文関連 ---
             elif path == "/api/papers":
                 with store.db.get_connection() as conn:
-                    cur = conn.execute("SELECT * FROM papers ORDER BY year DESC, title ASC")
+                    # 登録順（id の昇順）で取得
+                    cur = conn.execute("SELECT * FROM papers ORDER BY id ASC")
                     papers = []
                     for r in cur.fetchall():
                         p = dict(r)

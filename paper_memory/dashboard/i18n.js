@@ -37,6 +37,10 @@ const i18nDict = {
 
         "paper.confirm_delete": "Are you sure you want to delete this paper?\nWARNING: This will permanently delete the paper metadata, ALL its notes, ALL links to these notes, the ChromaDB index, and the extracted Markdown files.",
         "paper.delete_success": "Paper deleted successfully",
+        "paper.sort.label": "Sort",
+        "paper.sort.registration": "Registration order",
+        "paper.sort.title": "Title (A-Z)",
+        "paper.sort.year": "Publication year",
 
         "ref.unread_title": "Unread References",
         "ref.source": "Cited by",
@@ -168,6 +172,10 @@ const i18nDict = {
 
         "paper.confirm_delete": "本当にこの論文を削除しますか？\n⚠️警告：この操作により以下のデータが完全に削除されます：\n・論文のメタデータ\n・この論文に紐づく【すべてのノート】\n・他のノートからの【すべてのリンク】\n・ChromaDBの検索インデックス\n・抽出済みのMarkdownデータ (extracted/)",
         "paper.delete_success": "論文を削除しました",
+        "paper.sort.label": "並び替え",
+        "paper.sort.registration": "登録順",
+        "paper.sort.title": "ABC順",
+        "paper.sort.year": "出版年順",
 
         "ref.unread_title": "未読参考文献",
         "ref.source": "引用元",

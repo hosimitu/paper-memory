@@ -104,6 +104,9 @@ class App {
         this.currentView = 'overview';
         this.cache = {};
         this.qaHistoryOffset = 0;
+        this.paperSortMode = ['title', 'year', 'registration'].includes(localStorage.getItem('paper-sort-mode'))
+            ? localStorage.getItem('paper-sort-mode')
+            : 'registration';
         this.init();
     }
 
@@ -480,9 +483,15 @@ class App {
 
     async renderPapers() {
         const papers = await this.fetchJson('/papers');
-        
-        // タイトルでアルファベット順にソート
-        papers.sort((a, b) => a.title.localeCompare(b.title));
+        const sortedPapers = this.paperSortMode === 'title'
+            ? [...papers].sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }))
+            : this.paperSortMode === 'year'
+                ? [...papers].sort((a, b) => {
+                    const ay = Number(a.year) || 0;
+                    const by = Number(b.year) || 0;
+                    return by - ay || (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+                })
+                : papers;
 
         // デフォルトはリスト表示
         if (!this.paperViewMode) {
@@ -490,15 +499,28 @@ class App {
         }
 
         const headerHtml = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
                 <h3 style="margin: 0;">${i18n.t('nav.papers') || '登録論文'}</h3>
-                <div class="view-toggle">
-                    <button id="btn-view-list" class="action-btn ${this.paperViewMode === 'list' ? 'active' : ''}" title="リスト表示">
-                        <i data-lucide="list"></i>
-                    </button>
-                    <button id="btn-view-grid" class="action-btn ${this.paperViewMode === 'grid' ? 'active' : ''}" title="タイル表示">
-                        <i data-lucide="layout-grid"></i>
-                    </button>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <div class="view-toggle" style="display: flex; gap: 4px;">
+                        <button id="btn-sort-registration" class="action-btn ${this.paperSortMode === 'registration' ? 'active' : ''}" title="${i18n.t('paper.sort.registration')}">
+                            ${i18n.t('paper.sort.registration')}
+                        </button>
+                        <button id="btn-sort-title" class="action-btn ${this.paperSortMode === 'title' ? 'active' : ''}" title="${i18n.t('paper.sort.title')}">
+                            ${i18n.t('paper.sort.title')}
+                        </button>
+                        <button id="btn-sort-year" class="action-btn ${this.paperSortMode === 'year' ? 'active' : ''}" title="${i18n.t('paper.sort.year')}">
+                            ${i18n.t('paper.sort.year')}
+                        </button>
+                    </div>
+                    <div class="view-toggle">
+                        <button id="btn-view-list" class="action-btn ${this.paperViewMode === 'list' ? 'active' : ''}" title="リスト表示">
+                            <i data-lucide="list"></i>
+                        </button>
+                        <button id="btn-view-grid" class="action-btn ${this.paperViewMode === 'grid' ? 'active' : ''}" title="タイル表示">
+                            <i data-lucide="layout-grid"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -506,7 +528,7 @@ class App {
         const list = document.createElement('div');
         list.className = `paper-view-container ${this.paperViewMode}-view`;
 
-        papers.forEach((paper, index) => {
+        sortedPapers.forEach((paper, index) => {
             const doiLink = paper.doi ? `<a href="https://doi.org/${paper.doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${paper.doi}</a>` : '-';
             let mdLink = '';
             if (paper.has_markdown && paper.id) {
@@ -547,6 +569,21 @@ class App {
         };
         document.getElementById('btn-view-grid').onclick = () => {
             this.paperViewMode = 'grid';
+            this.renderPapers();
+        };
+        document.getElementById('btn-sort-registration').onclick = () => {
+            this.paperSortMode = 'registration';
+            localStorage.setItem('paper-sort-mode', this.paperSortMode);
+            this.renderPapers();
+        };
+        document.getElementById('btn-sort-title').onclick = () => {
+            this.paperSortMode = 'title';
+            localStorage.setItem('paper-sort-mode', this.paperSortMode);
+            this.renderPapers();
+        };
+        document.getElementById('btn-sort-year').onclick = () => {
+            this.paperSortMode = 'year';
+            localStorage.setItem('paper-sort-mode', this.paperSortMode);
             this.renderPapers();
         };
 
