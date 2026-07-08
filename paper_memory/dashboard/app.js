@@ -1384,7 +1384,260 @@ class App {
     }
 }
 
+// ========================================
+// PDF ドラッグ＆ドロップ & 自動解析
+// ========================================
+
+function initPdfDropzone(appInstance) {
+    const overlay = document.getElementById('drop-overlay');
+    const analysisModal = document.getElementById('analysis-modal');
+    const confirmDialog = document.getElementById('confirm-dialog');
+    
+    if (!overlay || !analysisModal) return;
+
+    let dragCounter = 0;
+
+    // ドラッグイベント
+    document.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (e.dataTransfer.types.includes('Files')) {
+            overlay.classList.add('active');
+        }
+    });
+    document.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            overlay.classList.remove('active');
+        }
+    });
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+    document.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('active');
+
+        const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+        if (files.length === 0) return;
+
+        // 最初の1ファイルのみ処理
+        await handlePdfUpload(files[0]);
+    });
+
+    // PDFアップロード処理
+    async function handlePdfUpload(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        let uploadResult;
+        try {
+            const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+            uploadResult = await resp.json();
+            if (uploadResult.error) {
+                throw new Error(uploadResult.error);
+            }
+        } catch (err) {
+            alert(i18n.currentLang() === 'ja' ? 'アップロードに失敗しました: ' + err.message : 'Upload failed: ' + err.message);
+            return;
+        }
+
+        if (uploadResult.status === 'already_registered') {
+            const action = await showConfirmDialog(
+                i18n.currentLang() === 'ja' 
+                    ? `「${uploadResult.paper_name}」は既に登録されています。どうしますか？` 
+                    : `"${uploadResult.paper_name}" is already registered. What would you like to do?`,
+                [
+                    { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: 'cancel' },
+                    { label: i18n.currentLang() === 'ja' ? '再解析して上書き' : 'Re-analyze & overwrite', value: 'force', primary: true }
+                ]
+            );
+            if (action === 'force') {
+                startAnalysis(uploadResult.pdf_path, false, true);
+            }
+        } else if (uploadResult.status === 'interrupted') {
+            const action = await showConfirmDialog(
+                i18n.currentLang() === 'ja' 
+                    ? `「${uploadResult.paper_name}」の解析は前回中断されました。どうしますか？` 
+                    : `Analysis of "${uploadResult.paper_name}" was interrupted last time. What would you like to do?`,
+                [
+                    { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: 'cancel' },
+                    { label: i18n.currentLang() === 'ja' ? '最初からやり直す' : 'Start from scratch', value: 'force' },
+                    { label: i18n.currentLang() === 'ja' ? '続きから再開' : 'Resume', value: 'resume', primary: true }
+                ]
+            );
+            if (action === 'resume') {
+                startAnalysis(uploadResult.pdf_path, true, false);
+            } else if (action === 'force') {
+                startAnalysis(uploadResult.pdf_path, false, true);
+            }
+        } else {
+            // 新規
+            startAnalysis(uploadResult.pdf_path, false, false);
+        }
+    }
+
+    // 確認ダイアログ
+    function showConfirmDialog(message, buttons) {
+        return new Promise((resolve) => {
+            const msgEl = document.getElementById('confirm-dialog-message');
+            const actionsEl = confirmDialog.querySelector('.confirm-dialog-actions');
+            msgEl.textContent = message;
+            actionsEl.innerHTML = '';
+            buttons.forEach(btn => {
+                const el = document.createElement('button');
+                el.textContent = btn.label;
+                if (btn.primary) el.classList.add('primary');
+                el.addEventListener('click', () => {
+                    confirmDialog.classList.remove('active');
+                    resolve(btn.value);
+                });
+                actionsEl.appendChild(el);
+            });
+            confirmDialog.classList.add('active');
+        });
+    }
+
+    // 解析開始
+    function startAnalysis(pdfPath, resume, force) {
+        analysisModal.classList.add('active');
+        resetAnalysisModal();
+
+        const closeBtn = analysisModal.querySelector('.analysis-modal-close');
+        closeBtn.onclick = () => {
+            analysisModal.classList.remove('active');
+            // データ更新
+            if (appInstance && typeof appInstance.switchView === 'function') {
+                appInstance.switchView(appInstance.currentView, appInstance.currentParams, false);
+            }
+        };
+
+        fetch('/api/analyze_paper', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pdf_path: pdfPath, resume, force })
+        }).then(response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            function processChunk({ done, value }) {
+                if (done) return;
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // 不完全な最終行を保持
+
+                let currentEvent = null;
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        currentEvent = line.slice(7).trim();
+                    } else if (line.startsWith('data: ') && currentEvent) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            handleAnalysisEvent(currentEvent, data);
+                        } catch (e) { /* skip */ }
+                        currentEvent = null;
+                    } else if (line.trim() === '') {
+                        currentEvent = null;
+                    }
+                }
+
+                return reader.read().then(processChunk);
+            }
+
+            return reader.read().then(processChunk);
+        }).catch(err => {
+            showAnalysisError('Connection error: ' + err.message, false);
+        });
+    }
+
+    // SSEイベントハンドラ
+    function handleAnalysisEvent(event, data) {
+        const statusText = document.getElementById('analysis-status-text');
+        const progressFill = document.getElementById('analysis-progress-fill');
+
+        if (event === 'progress') {
+            statusText.textContent = data.message || '';
+            updateStepUI(data.step);
+
+            const stepOrder = ['uploading', 'extracting', 'turn_1', 'turn_2', 'turn_3', 'registering'];
+            const idx = stepOrder.indexOf(data.step);
+            if (idx >= 0) {
+                const pct = Math.round(((idx + 0.5) / stepOrder.length) * 100);
+                progressFill.style.width = pct + '%';
+            }
+        } else if (event === 'complete') {
+            progressFill.style.width = '100%';
+            statusText.textContent = i18n.t('analysis.complete');
+            analysisModal.querySelectorAll('.analysis-step').forEach(s => {
+                s.classList.remove('active');
+                s.classList.add('completed');
+            });
+            showAnalysisResult(data);
+        } else if (event === 'error') {
+            showAnalysisError(data.error, data.resumable, data.pdf_path);
+        }
+    }
+
+    function updateStepUI(currentStep) {
+        const steps = analysisModal.querySelectorAll('.analysis-step');
+        const stepOrder = ['uploading', 'extracting', 'turn_1', 'turn_2', 'turn_3', 'registering'];
+        const currentIdx = stepOrder.indexOf(currentStep);
+
+        steps.forEach((step, i) => {
+            step.classList.remove('active', 'completed');
+            if (i < currentIdx) step.classList.add('completed');
+            else if (i === currentIdx) step.classList.add('active');
+        });
+    }
+
+    function resetAnalysisModal() {
+        document.getElementById('analysis-status-text').textContent = i18n.t('analysis.preparing');
+        document.getElementById('analysis-progress-fill').style.width = '0%';
+        document.getElementById('analysis-result').style.display = 'none';
+        document.getElementById('analysis-error').style.display = 'none';
+        document.getElementById('analysis-title').textContent = i18n.t('analysis.title');
+        analysisModal.querySelectorAll('.analysis-step').forEach(s => {
+            s.classList.remove('active', 'completed');
+        });
+    }
+
+    function showAnalysisResult(data) {
+        const el = document.getElementById('analysis-result');
+        el.style.display = 'block';
+        el.innerHTML = `
+            <h3>✅ ${i18n.t('analysis.complete')}</h3>
+            <p><strong>${data.paper_title || ''}</strong></p>
+            <p>Notes: ${data.notes_count || 0} / References: ${data.refs_count || 0}</p>
+        `;
+    }
+
+    function showAnalysisError(message, resumable, pdfPath) {
+        const el = document.getElementById('analysis-error');
+        el.style.display = 'block';
+        let html = `<h3>⚠️ ${i18n.t('analysis.interrupted')}</h3><p>${message}</p>`;
+        if (resumable && pdfPath) {
+            html += `<button class="resume-btn" id="btn-analysis-resume">🔄 ${i18n.currentLang() === 'ja' ? '続きから再開' : 'Resume'}</button>`;
+        }
+        el.innerHTML = html;
+
+        const btn = document.getElementById('btn-analysis-resume');
+        if (btn) {
+            btn.onclick = () => {
+                document.getElementById('analysis-error').style.display = 'none';
+                startAnalysis(pdfPath, true, false);
+            };
+        }
+    }
+}
+
 // Start the app
 window.addEventListener('DOMContentLoaded', () => {
     window.app = new App();
+    initPdfDropzone(window.app);
 });
+

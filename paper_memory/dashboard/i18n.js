@@ -119,7 +119,20 @@ const i18nDict = {
         "type.limitation": "Limitation",
         "type.future_work": "Future Work",
         "type.definition": "Definition",
-        "type.other": "Other"
+        "type.other": "Other",
+
+        "analysis.title": "Analyzing paper...",
+        "analysis.uploading": "Upload",
+        "analysis.extracting": "Text extraction",
+        "analysis.turn_1": "AI Analysis (1/3)",
+        "analysis.turn_2": "AI Analysis (2/3)",
+        "analysis.turn_3": "AI Analysis (3/3)",
+        "analysis.registering": "DB Registration",
+        "analysis.preparing": "Preparing...",
+        "analysis.complete": "Complete!",
+        "analysis.interrupted": "Processing was interrupted",
+        "analysis.drop_pdf": "Drop PDF file to start analysis",
+        "analysis.confirm": "Confirm"
     },
     ja: {
         "nav.overview": "概要",
@@ -237,7 +250,20 @@ const i18nDict = {
         "type.limitation": "限界・課題",
         "type.future_work": "今後の展望",
         "type.definition": "定義",
-        "type.other": "その他"
+        "type.other": "その他",
+
+        "analysis.title": "論文を解析中...",
+        "analysis.uploading": "アップロード",
+        "analysis.extracting": "テキスト抽出",
+        "analysis.turn_1": "AI解析 (1/3)",
+        "analysis.turn_2": "AI解析 (2/3)",
+        "analysis.turn_3": "AI解析 (3/3)",
+        "analysis.registering": "DB登録",
+        "analysis.preparing": "準備中...",
+        "analysis.complete": "完了！",
+        "analysis.interrupted": "処理が中断されました",
+        "analysis.drop_pdf": "PDFファイルをドロップして解析を開始",
+        "analysis.confirm": "確認"
     }
 };
 

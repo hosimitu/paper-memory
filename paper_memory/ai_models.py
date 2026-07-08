@@ -38,8 +38,13 @@ SEARCH_REWRITE_MODEL = "gemma-4-26b-a4b-it"
 
 # ノート間の意味的な関連性を評価し、自動リンクを構築するために使用するモデル
 # [使用箇所] paper_memory/autolinker.py
-AUTOLINK_MODEL = "gemini-3.1-flash-lite"
+AUTOLINK_MODEL = "gemini-3.5-flash"
 
 # 検索結果のリランキングに使用するモデル
 # [使用箇所] paper_memory/store.py
 RERANK_MODEL = "gemini-3.1-flash-lite"
+
+# 論文解析（Web UIからのAPI経由解析）で使用するモデル
+# [使用箇所] paper_memory/analyzer.py
+ANALYSIS_MODEL = "gemini-3.1-flash-lite"
+

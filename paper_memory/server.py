@@ -505,12 +505,27 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+    def do_OPTIONS(self):
+        """CORS プリフライトに対応"""
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
     def do_POST(self):
         """POST リクエストのルーティング"""
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
         if path.startswith("/api/"):
+            content_type = self.headers.get('Content-Type', '')
+            if 'multipart/form-data' in content_type:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body_bytes = self.rfile.read(content_length)
+                self.handle_multipart_upload(path, content_type, body_bytes)
+                return
+
             # リクエストボディの読み込み
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length).decode('utf-8')
@@ -524,6 +539,107 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(405)
             self.end_headers()
 
+    def handle_multipart_upload(self, path, content_type, body_bytes):
+        """multipart/form-data のパースとPDF保存、状態返却"""
+        if path != "/api/upload":
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        try:
+            boundary = content_type.split("boundary=")[1].strip().encode('utf-8')
+            parts = body_bytes.split(b'--' + boundary)
+            
+            file_data = None
+            filename = None
+            
+            for part in parts:
+                if b'Content-Disposition' in part and b'filename=' in part:
+                    headers_part, body_part = part.split(b'\r\n\r\n', 1)
+                    if body_part.endswith(b'\r\n'):
+                        body_part = body_part[:-2]
+                    if body_part.endswith(b'--'):
+                        body_part = body_part[:-2]
+                    if body_part.endswith(b'\r\n'):
+                        body_part = body_part[:-2]
+                        
+                    file_data = body_part
+                    
+                    filename_match = re.search(r'filename="([^"]+)"', headers_part.decode('utf-8', errors='ignore'))
+                    if filename_match:
+                        filename = filename_match.group(1)
+                    break
+            
+            if not file_data or not filename:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "No file uploaded"}, ensure_ascii=False).encode('utf-8'))
+                return
+
+            project_root = Path(__file__).parent.parent
+            pdf_dir = project_root / "pdf"
+            pdf_dir.mkdir(parents=True, exist_ok=True)
+            
+            safe_filename = Path(filename).name
+            dest_path = pdf_dir / safe_filename
+            
+            with open(dest_path, "wb") as f:
+                f.write(file_data)
+                
+            pdf_path_str = f"pdf/{safe_filename}"
+            stem = Path(safe_filename).stem
+            safe_stem = stem.encode('ascii', 'ignore').decode('ascii')
+            if not safe_stem.strip():
+                safe_stem = "paper"
+            clean_name = re.sub(r'[^a-zA-Z0-9\s_-]', '', safe_stem).strip().replace(' ', '_')
+            if len(clean_name) > 80:
+                clean_name = clean_name[:80].rstrip('_')
+                
+            extracted_dir = project_root / "extracted" / clean_name
+            
+            store = NoteStore()
+            already_registered = False
+            with store.db.get_connection() as conn:
+                cur = conn.execute("SELECT id, title FROM papers WHERE pdf_path = ? OR pdf_path = ?", (pdf_path_str, safe_filename))
+                row = cur.fetchone()
+                if row:
+                    already_registered = True
+                    paper_title = row["title"]
+                else:
+                    paper_title = stem.replace('_', ' ').replace('-', ' ')
+                    
+            from .analyzer import load_state
+            state = load_state(extracted_dir)
+            
+            status = "new"
+            if already_registered:
+                status = "already_registered"
+            elif state.get("status") in ["processing", "error"]:
+                status = "interrupted"
+                
+            data = {
+                "status": status,
+                "paper_name": paper_title,
+                "pdf_path": pdf_path_str,
+                "message": "Upload successful"
+            }
+            
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+            
+        except Exception as e:
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}, ensure_ascii=False).encode('utf-8'))
+
+
     def handle_api_post(self, path, post_data):
         """API POST リクエストの処理"""
         ref_store = ReferenceStore()
@@ -532,7 +648,57 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         status_code = 200
 
         try:
-            if path == "/api/qa":
+            if path == "/api/analyze_paper":
+                pdf_path = post_data.get("pdf_path", "")
+                resume = post_data.get("resume", False)
+                force = post_data.get("force", False)
+
+                if not pdf_path:
+                    status_code = 400
+                    data = {"error": "pdf_path is required"}
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+
+                    def send_sse(event_type: str, payload: dict):
+                        try:
+                            line = f"event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                            self.wfile.write(line.encode("utf-8"))
+                            self.wfile.flush()
+                        except Exception:
+                            pass
+
+                    def status_callback(step: str, message: str, extra: dict = None):
+                        payload = {"step": step, "message": message, "pdf_path": pdf_path}
+                        if extra:
+                            payload.update(extra)
+                        send_sse("progress", payload)
+
+                    try:
+                        from .analyzer import analyze_paper
+                        result = analyze_paper(
+                            pdf_path_str=pdf_path,
+                            status_callback=status_callback,
+                            resume=resume,
+                            force=force
+                        )
+                        send_sse("complete", {
+                            "paper_title": result["paper_title"],
+                            "notes_count": result["notes_count"],
+                            "refs_count": result["refs_count"]
+                        })
+                    except Exception as err:
+                        send_sse("error", {
+                            "error": str(err),
+                            "resumable": True,
+                            "pdf_path": pdf_path
+                        })
+                    return
+
+            elif path == "/api/qa":
                 query_text = post_data.get("query", "")
                 if not query_text:
                     status_code = 400

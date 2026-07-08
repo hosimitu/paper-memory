@@ -167,6 +167,74 @@
         </div>
     </div>
 
+    <!-- PDF ドラッグ&ドロップ オーバーレイ -->
+    <div id="drop-overlay" class="drop-overlay">
+        <div class="drop-overlay-content">
+            <i data-lucide="file-up" class="drop-icon"></i>
+            <p data-i18n="analysis.drop_pdf">PDFファイルをドロップして解析を開始</p>
+        </div>
+    </div>
+
+    <!-- 解析プログレスモーダル -->
+    <div id="analysis-modal" class="modal analysis-modal">
+        <div class="modal-content analysis-modal-content">
+            <header class="modal-header">
+                <span class="note-type">📄 <span data-i18n="nav.papers">登録論文</span></span>
+                <button class="modal-close analysis-modal-close"><i data-lucide="x"></i></button>
+            </header>
+            <div class="analysis-modal-body">
+                <h2 id="analysis-title" data-i18n="analysis.title">論文を解析中...</h2>
+                <div class="analysis-progress-container">
+                    <div class="analysis-steps">
+                        <div class="analysis-step" data-step="uploading">
+                            <div class="step-indicator"><i data-lucide="upload"></i></div>
+                            <span data-i18n="analysis.uploading">アップロード</span>
+                        </div>
+                        <div class="analysis-step" data-step="extracting">
+                            <div class="step-indicator"><i data-lucide="file-search"></i></div>
+                            <span data-i18n="analysis.extracting">テキスト抽出</span>
+                        </div>
+                        <div class="analysis-step" data-step="turn_1">
+                            <div class="step-indicator"><i data-lucide="brain"></i></div>
+                            <span data-i18n="analysis.turn_1">AI解析 (1/3)</span>
+                        </div>
+                        <div class="analysis-step" data-step="turn_2">
+                            <div class="step-indicator"><i data-lucide="brain"></i></div>
+                            <span data-i18n="analysis.turn_2">AI解析 (2/3)</span>
+                        </div>
+                        <div class="analysis-step" data-step="turn_3">
+                            <div class="step-indicator"><i data-lucide="brain"></i></div>
+                            <span data-i18n="analysis.turn_3">AI解析 (3/3)</span>
+                        </div>
+                        <div class="analysis-step" data-step="registering">
+                            <div class="step-indicator"><i data-lucide="database"></i></div>
+                            <span data-i18n="analysis.registering">DB登録</span>
+                        </div>
+                    </div>
+                    <div class="analysis-progress-bar">
+                        <div id="analysis-progress-fill" class="analysis-progress-fill"></div>
+                    </div>
+                </div>
+                <p id="analysis-status-text" class="analysis-status-text" data-i18n="analysis.preparing">準備中...</p>
+                <div id="analysis-result" class="analysis-result" style="display:none;"></div>
+                <div id="analysis-error" class="analysis-error" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 確認ダイアログ -->
+    <div id="confirm-dialog" class="modal confirm-dialog">
+        <div class="modal-content confirm-dialog-content">
+            <header class="modal-header">
+                <span class="note-type">⚠️ <span data-i18n="analysis.confirm">確認</span></span>
+            </header>
+            <div class="confirm-dialog-body">
+                <p id="confirm-dialog-message"></p>
+                <div class="confirm-dialog-actions"></div>
+            </div>
+        </div>
+    </div>
+
     <script src="i18n.js"></script>
     <script src="app.js?v=4"></script>
 </body>
