@@ -184,7 +184,7 @@ class Database:
                 )
                 """)
             except sqlite3.OperationalError as e:
-                print(f"⚠️ sqlite-vec の初期化をスキップしました: {e}")
+                print(f"[WARNING] sqlite-vec の初期化をスキップしました: {e}")
 
             # 参考文献 (Reading List)
             conn.execute("""
@@ -271,7 +271,7 @@ class Database:
         self.initialize()
         
         if not notes_dir.exists():
-            print(f"⚠️ ディレクトリが見つかりません: {notes_dir}", file=sys.stderr)
+            print(f"[WARNING] ディレクトリが見つかりません: {notes_dir}", file=sys.stderr)
             return 0
 
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -286,7 +286,7 @@ class Database:
                 with open(json_file, "r", encoding="utf-8") as f:
                     notes_to_migrate.append((json_file, json.load(f)))
             except Exception as e:
-                print(f"⚠️ ファイル読み込みエラー ({json_file.name}): {e}", file=sys.stderr)
+                print(f"[WARNING] ファイル読み込みエラー ({json_file.name}): {e}", file=sys.stderr)
 
         migrated_count = 0
         with self.get_connection() as conn:
@@ -376,7 +376,7 @@ class Database:
                             created_at=excluded.created_at
                         """, (source_id, target_id, reason, created_at))
                     except sqlite3.IntegrityError:
-                        print(f"⚠️ リンク先ノート ({target_id}) が存在しないためリンクをスキップしました。", file=sys.stderr)
+                        print(f"[WARNING] リンク先ノート ({target_id}) が存在しないためリンクをスキップしました。", file=sys.stderr)
                 
                 migrated_count += 1
                 
@@ -387,7 +387,7 @@ class Database:
                 try:
                     shutil.move(str(file_path), str(backup_dir / file_path.name))
                 except Exception as e:
-                    print(f"⚠️ バックアップ移動エラー ({file_path.name}): {e}", file=sys.stderr)
+                    print(f"[WARNING] バックアップ移動エラー ({file_path.name}): {e}", file=sys.stderr)
 
         return migrated_count
 
@@ -396,7 +396,7 @@ class Database:
         self.initialize()
         
         if not refs_dir.exists():
-            print(f"⚠️ ディレクトリが見つかりません: {refs_dir}", file=sys.stderr)
+            print(f"[WARNING] ディレクトリが見つかりません: {refs_dir}", file=sys.stderr)
             return 0
 
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -431,9 +431,9 @@ class Database:
                     try:
                         shutil.move(str(history_path), str(backup_dir / "_history.json"))
                     except Exception as e:
-                        print(f"⚠️ バックアップ移動エラー ({history_path.name}): {e}", file=sys.stderr)
+                        print(f"[WARNING] バックアップ移動エラー ({history_path.name}): {e}", file=sys.stderr)
                 except Exception as e:
-                    print(f"⚠️ 履歴読み込みエラー: {e}", file=sys.stderr)
+                    print(f"[WARNING] 履歴読み込みエラー: {e}", file=sys.stderr)
 
             # 2. 個別 JSON (unread等) の移行
             for json_file in refs_dir.glob("*.json"):
@@ -482,10 +482,10 @@ class Database:
                     try:
                         shutil.move(str(json_file), str(backup_dir / json_file.name))
                     except Exception as e:
-                        print(f"⚠️ バックアップ移動エラー ({json_file.name}): {e}", file=sys.stderr)
+                        print(f"[WARNING] バックアップ移動エラー ({json_file.name}): {e}", file=sys.stderr)
 
                 except Exception as e:
-                    print(f"⚠️ 参考文献読み込みエラー ({json_file.name}): {e}", file=sys.stderr)
+                    print(f"[WARNING] 参考文献読み込みエラー ({json_file.name}): {e}", file=sys.stderr)
 
             conn.commit()
             

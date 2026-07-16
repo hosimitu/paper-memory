@@ -379,14 +379,14 @@ def analyze_paper(
             from .autolinker import evaluate_links
             # 登録された各ノートを周辺候補と自動リンク
             for note in added_notes:
-                candidates = store.find_neighbors(note.id, n=10)
+                candidates = store.find_neighbors(note.id, n_results=10)
                 if candidates:
                     evaluations = evaluate_links(note.to_dict(), candidates)
                     for ev in evaluations:
                         if ev.get("is_linked"):
                             store.add_link(note.id, ev.get("target_id"), ev.get("reason", ""))
-        except Exception:
-            pass # autolink失敗は処理全体を落とさない
+        except Exception as e:
+            print(f"[WARNING] 自動リンク生成に失敗しました: {e}", file=sys.stderr)
 
         return {
             "status": "success",

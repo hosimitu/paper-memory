@@ -212,7 +212,7 @@ class NoteStore:
             )
             embedding = embeddings[0] if embeddings else None
         except Exception as e:
-            print(f"⚠️ Embeddings API エラー: {e}", file=sys.stderr)
+            print(f"[WARNING] Embeddings API エラー: {e}", file=sys.stderr)
             embedding = None
 
         with self.db.get_connection() as conn:
@@ -242,7 +242,7 @@ class NoteStore:
                     except ImportError:
                         pass
                     except Exception as e:
-                        print(f"⚠️ sqlite-vec への登録をスキップしました: {e}", file=sys.stderr)
+                        print(f"[WARNING] sqlite-vec への登録をスキップしました: {e}", file=sys.stderr)
             conn.commit()
 
     # ========================================
@@ -270,7 +270,7 @@ class NoteStore:
                 task_type="RETRIEVAL_DOCUMENT"
             )
         except Exception as e:
-            print(f"⚠️ Batch Embeddings API エラー: {e}", file=sys.stderr)
+            print(f"[WARNING] Batch Embeddings API エラー: {e}", file=sys.stderr)
             embeddings = [None] * len(notes)
             
         with self.db.get_connection() as conn:
@@ -402,7 +402,7 @@ class NoteStore:
             try:
                 shutil.rmtree(target_dir)
             except Exception as e:
-                print(f"⚠️ 抽出済みMarkdownフォルダの削除に失敗しました {target_dir}: {e}", file=sys.stderr)
+                print(f"[WARNING] 抽出済みMarkdownフォルダの削除に失敗しました {target_dir}: {e}", file=sys.stderr)
 
     def delete_paper(self, paper_id: int) -> dict:
         """論文とその全ノート、抽出済みテキストを一括削除"""
@@ -666,7 +666,7 @@ class NoteStore:
             raw_text = response.text.strip()
             return self._parse_rewrite_candidates(raw_text)
         except Exception as e:
-            print(f"⚠️ クエリ補正に失敗しました: {e}", file=sys.stderr)
+            print(f"[WARNING] クエリ補正に失敗しました: {e}", file=sys.stderr)
             return []
 
     def _hybrid_search(self, query: str, n_results: int, element_type_filter: Optional[str] = None, status_callback: Optional[Callable] = None) -> list[dict]:
@@ -685,7 +685,7 @@ class NoteStore:
             )
             query_emb = embeddings[0] if embeddings else None
         except Exception as e:
-            print(f"⚠️ Query Embeddings API エラー: {e}", file=sys.stderr)
+            print(f"[WARNING] Query Embeddings API エラー: {e}", file=sys.stderr)
             query_emb = None
 
         vec_ranks = {}
@@ -742,7 +742,7 @@ class NoteStore:
                     for i, row in enumerate(cur.fetchall()):
                         vec_ranks[row["id"]] = i + 1
                 except Exception as e:
-                    print(f"⚠️ sqlite-vec 検索エラー: {e}", file=sys.stderr)
+                    print(f"[WARNING] sqlite-vec 検索エラー: {e}", file=sys.stderr)
 
         # RRF (Reciprocal Rank Fusion) Calculation
         k = 60
@@ -819,7 +819,7 @@ class NoteStore:
             return candidates[:top_k]
             
         except Exception as e:
-            print(f"⚠️ リランキングに失敗しました: {e}", file=sys.stderr)
+            print(f"[WARNING] リランキングに失敗しました: {e}", file=sys.stderr)
             return candidates[:top_k]
 
     def search(
@@ -853,7 +853,7 @@ class NoteStore:
         final_results = self._rerank_with_llm(query, all_candidates, n_results, status_callback=status_callback)
 
         if not final_results:
-            print(f"ℹ️ セマンティック検索でヒットしなかったため、キーワード検索に切り替えます: {query}", file=sys.stderr)
+            print(f"[INFO] セマンティック検索でヒットしなかったため、キーワード検索に切り替えます: {query}", file=sys.stderr)
             return {"results": self._keyword_search(query, n_results), "method": "keyword", "rewritten_queries": rewritten_queries}
 
         return {"results": final_results, "method": "hybrid", "rewritten_queries": rewritten_queries}
@@ -932,7 +932,7 @@ class NoteStore:
                             if len(results) >= n_results:
                                 break
         except Exception as e:
-            print(f"⚠️ sqlite-vec 検索エラー: {e}", file=sys.stderr)
+            print(f"[WARNING] sqlite-vec 検索エラー: {e}", file=sys.stderr)
                             
         if not results:
             # Embeddingがない場合は、テキストからLLMで埋め込みを取得して検索
@@ -977,7 +977,7 @@ class NoteStore:
                                 if len(results) >= n_results:
                                     break
             except Exception as e:
-                print(f"⚠️ フォールバック検索エラー: {e}", file=sys.stderr)
+                print(f"[WARNING] フォールバック検索エラー: {e}", file=sys.stderr)
                         
         return results
 
