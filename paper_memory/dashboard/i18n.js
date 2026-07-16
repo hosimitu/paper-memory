@@ -138,10 +138,11 @@ const i18nDict = {
         "analysis.registering": "DB Registration",
         "analysis.preparing": "Preparing...",
         "analysis.complete": "Complete!",
+        "analysis.markdown_complete": "Markdown extraction complete",
         "analysis.interrupted": "Processing was interrupted",
         "analysis.drop_pdf": "Drop PDF file to start analysis",
         "analysis.confirm": "Confirm",
-        
+
         "upload.dropzone_title": "Drop PDF here",
         "upload.dropzone_desc": "or click to select a file",
         "upload.queue_title": "Processing Queue (Markdown Extracted)",
@@ -286,6 +287,7 @@ const i18nDict = {
         "analysis.registering": "DB登録",
         "analysis.preparing": "準備中...",
         "analysis.complete": "完了！",
+        "analysis.markdown_complete": "Markdown抽出が完了しました",
         "analysis.interrupted": "処理が中断されました",
         "analysis.drop_pdf": "PDFファイルをドロップして解析を開始",
         "analysis.confirm": "確認",
@@ -327,7 +329,7 @@ function applyTranslations(root = document) {
         const key = el.getAttribute('data-i18n');
         el.innerText = t(key);
     });
-    
+
     root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
         el.placeholder = t(key);
@@ -357,10 +359,10 @@ function getTranslatedString(val) {
 }
 
 // Export for use in app.js
-window.i18n = { 
-    t, 
-    setLanguage, 
-    applyTranslations, 
+window.i18n = {
+    t,
+    setLanguage,
+    applyTranslations,
     currentLang: () => currentLang,
     getTranslatedString,
     loadConfig: async () => {

@@ -30,16 +30,16 @@ const TYPE_COLORS = {
 // キーワードを現在の言語に合わせて平滑化した文字列配列として取得する
 const getKeywordsList = (keywords) => {
     if (!keywords) return [];
-    
+
     // 文字列の場合はJSONパースを試みる
     if (typeof keywords === 'string') {
         try {
             keywords = JSON.parse(keywords);
-        } catch(e) {
+        } catch (e) {
             return [keywords];
         }
     }
-    
+
     // 配列の場合は各要素を文字列または翻訳オブジェクトとして解決
     if (Array.isArray(keywords)) {
         return keywords.map(kw => {
@@ -49,7 +49,7 @@ const getKeywordsList = (keywords) => {
             return kw ? String(kw) : '';
         }).filter(Boolean);
     }
-    
+
     // オブジェクトの場合は言語別配列、または多言語文字列オブジェクトとして解決
     if (typeof keywords === 'object') {
         const lang = i18n.currentLang();
@@ -67,7 +67,7 @@ const getKeywordsList = (keywords) => {
         }
         return [i18n.getTranslatedString(keywords)].filter(Boolean);
     }
-    
+
     return [String(keywords)];
 };
 
@@ -429,7 +429,7 @@ class App {
         } else {
             doiArea.innerHTML = '';
         }
-        
+
         if (note.has_markdown) {
             doiArea.innerHTML += ` <span style="margin: 0 8px;">|</span> <a href="${note.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
         }
@@ -460,7 +460,7 @@ class App {
                 const card = document.createElement('div');
                 card.className = 'note-card mini';
                 card.style.setProperty('--type-color', TYPE_COLORS[link.element_type] || '#ccc');
-                
+
                 const translatedReason = i18n.getTranslatedString(link.reason);
                 const reasonHtml = translatedReason ? `<div class="note-reason" style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; font-style:italic;">"${translatedReason}"</div>` : '';
 
@@ -536,7 +536,7 @@ class App {
             if (paper.has_markdown && paper.id) {
                 mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
             }
-            const thumbnailHtml = paper.thumbnail_url 
+            const thumbnailHtml = paper.thumbnail_url
                 ? `<div class="paper-thumbnail"><img src="${paper.thumbnail_url}" alt="Thumbnail"></div>`
                 : `<div class="paper-thumbnail"><i data-lucide="image" style="width:32px;height:32px;opacity:0.3;"></i></div>`;
 
@@ -916,7 +916,7 @@ class App {
                 } else {
                     queueList.innerHTML = `<p style="color: var(--text-muted);">${i18n.currentLang() === 'ja' ? 'キューは空です' : 'Queue is empty'}</p>`;
                 }
-            } catch(e) {
+            } catch (e) {
                 console.error(e);
                 queueList.innerHTML = '<p style="color: red;">Error loading queue</p>';
             }
@@ -1227,10 +1227,10 @@ class App {
         if (graphStats && (graphStats.linked_notes > 0 || graphStats.paper_expanded > 0)) {
             statsHtml = `<span class="graph-stats-badge">
                 ${i18n.t('search.graph_stats', {
-                    direct: graphStats.direct_hits,
-                    linked: graphStats.linked_notes,
-                    paper: graphStats.paper_expanded
-                })}
+                direct: graphStats.direct_hits,
+                linked: graphStats.linked_notes,
+                paper: graphStats.paper_expanded
+            })}
             </span>`;
         }
 
@@ -1291,11 +1291,11 @@ class App {
         // 進捗ステップの定義（将来のフェーズ追加はここに行を追加するだけ）
         const STEPS = [
             { key: 'query_rewriting', label: () => i18n.t('qa.progress.query_rewriting'), icon: '✦', visible: useAiRewrite },
-            { key: 'searching',       label: () => i18n.t('qa.progress.searching', { threshold }), icon: '⊛' },
-            { key: 'reranking',       label: () => i18n.t('qa.progress.reranking'), icon: '⊕' },
+            { key: 'searching', label: () => i18n.t('qa.progress.searching', { threshold }), icon: '⊛' },
+            { key: 'reranking', label: () => i18n.t('qa.progress.reranking'), icon: '⊕' },
             { key: 'graph_expansion', label: () => i18n.t('qa.progress.graph_expansion'), icon: '⊗', visible: linkDepth > 0 },
             { key: 'generating_answer', label: () => i18n.t('qa.progress.generating_answer'), icon: '★' },
-            { key: 'saving',          label: () => i18n.t('qa.progress.saving'), icon: '✓' },
+            { key: 'saving', label: () => i18n.t('qa.progress.saving'), icon: '✓' },
         ].filter(s => s.visible !== false);
 
         // プログレスUIを描画
@@ -1424,10 +1424,10 @@ class App {
                 if (graphStats && (graphStats.linked_notes > 0 || graphStats.paper_expanded > 0)) {
                     statsHtml = `<span class="graph-stats-badge">
                         ${i18n.t('search.graph_stats', {
-                            direct: graphStats.direct_hits,
-                            linked: graphStats.linked_notes,
-                            paper: graphStats.paper_expanded
-                        })}
+                        direct: graphStats.direct_hits,
+                        linked: graphStats.linked_notes,
+                        paper: graphStats.paper_expanded
+                    })}
                     </span>`;
                 }
                 metaArea.innerHTML = `
@@ -1552,7 +1552,7 @@ function initPdfDropzone(appInstance) {
     const overlay = document.getElementById('drop-overlay');
     const analysisModal = document.getElementById('analysis-modal');
     const confirmDialog = document.getElementById('confirm-dialog');
-    
+
     if (!overlay || !analysisModal) return;
 
     let dragCounter = 0;
@@ -1607,8 +1607,8 @@ function initPdfDropzone(appInstance) {
 
         async function askAnalysisMode() {
             return await showConfirmDialog(
-                i18n.currentLang() === 'ja' 
-                    ? "PDFのアップロードが完了しました。次にどうしますか？" 
+                i18n.currentLang() === 'ja'
+                    ? "PDFのアップロードが完了しました。次にどうしますか？"
                     : "PDF upload complete. What would you like to do next?",
                 [
                     { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: null },
@@ -1620,8 +1620,8 @@ function initPdfDropzone(appInstance) {
 
         if (uploadResult.status === 'already_registered') {
             const action = await showConfirmDialog(
-                i18n.currentLang() === 'ja' 
-                    ? `「${uploadResult.paper_name}」は既に登録されています。どうしますか？` 
+                i18n.currentLang() === 'ja'
+                    ? `「${uploadResult.paper_name}」は既に登録されています。どうしますか？`
                     : `"${uploadResult.paper_name}" is already registered. What would you like to do?`,
                 [
                     { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: 'cancel' },
@@ -1634,8 +1634,8 @@ function initPdfDropzone(appInstance) {
             }
         } else if (uploadResult.status === 'interrupted') {
             const action = await showConfirmDialog(
-                i18n.currentLang() === 'ja' 
-                    ? `「${uploadResult.paper_name}」の解析は前回中断されました。どうしますか？` 
+                i18n.currentLang() === 'ja'
+                    ? `「${uploadResult.paper_name}」の解析は前回中断されました。どうしますか？`
                     : `Analysis of "${uploadResult.paper_name}" was interrupted last time. What would you like to do?`,
                 [
                     { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: 'cancel' },
@@ -1748,8 +1748,14 @@ function initPdfDropzone(appInstance) {
             }
         } else if (event === 'complete') {
             progressFill.style.width = '100%';
+            analysisModal.querySelectorAll('.analysis-step').forEach(s => {
+                s.classList.remove('active');
+                s.classList.add('completed');
+            });
             if (data.status === 'extracted_only') {
-                statusText.textContent = i18n.currentLang() === 'ja' ? 'Markdown抽出が完了しました' : 'Markdown extraction complete';
+                const completionMessage = i18n.t('analysis.markdown_complete');
+                statusText.textContent = completionMessage;
+                showAnalysisResult(data, completionMessage);
                 setTimeout(() => {
                     analysisModal.classList.remove('active');
                     if (appInstance && appInstance.currentView === 'upload') {
@@ -1758,10 +1764,6 @@ function initPdfDropzone(appInstance) {
                 }, 2000);
             } else {
                 statusText.textContent = i18n.t('analysis.complete');
-                analysisModal.querySelectorAll('.analysis-step').forEach(s => {
-                    s.classList.remove('active');
-                    s.classList.add('completed');
-                });
                 showAnalysisResult(data);
             }
         } else if (event === 'error') {
@@ -1792,13 +1794,19 @@ function initPdfDropzone(appInstance) {
         });
     }
 
-    function showAnalysisResult(data) {
+    function showAnalysisResult(data, completionMessage = null) {
         const el = document.getElementById('analysis-result');
         el.style.display = 'block';
+        const paperTitle = data.paper_title || '';
+        const message = completionMessage || i18n.t('analysis.complete');
+        const countBlock = data.status === 'extracted_only'
+            ? ''
+            : `<p>Notes: ${data.notes_count || 0} / References: ${data.refs_count || 0}</p>`;
         el.innerHTML = `
             <h3>✅ ${i18n.t('analysis.complete')}</h3>
-            <p><strong>${data.paper_title || ''}</strong></p>
-            <p>Notes: ${data.notes_count || 0} / References: ${data.refs_count || 0}</p>
+            ${paperTitle ? `<p><strong>${paperTitle}</strong></p>` : ''}
+            <p>${message}</p>
+            ${countBlock}
         `;
     }
 

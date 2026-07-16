@@ -2,9 +2,12 @@
 """
 Analyzer — Web UI経由でアップロードされた論文の自動解析モジュール
 """
+
 import os
+import sys
 import json
 import re
+import sqlite3
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Callable
@@ -17,6 +20,7 @@ from .store import NoteStore
 from .note import PaperNote, SourcePaper
 from .reference import Reference, ReferenceStore
 from .doi_fetcher import fetch_doi_by_title_and_authors
+
 
 def _extract_json(text: str) -> Optional[dict]:
     """テキストからJSON部分を抽出して辞書としてパースする"""
@@ -39,15 +43,152 @@ def _extract_json(text: str) -> Optional[dict]:
         # パースに失敗した場合はNone
         return None
 
-def load_state(output_dir: Path) -> dict:
-    """状態管理ファイルを読み込む。存在しない場合は初期状態を返す。"""
+
+def _normalize_title_key(value: str | None) -> str:
+    """タイトル比較用に正規化する。"""
+    if not value:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+
+def _candidate_keys_from_path(output_dir: Path) -> list[str]:
+    """フォルダ名と PDF/Markdown stem から比較用キー候補を生成する。"""
+    keys = []
+    raw_names = [output_dir.name]
+    for md_path in output_dir.glob("*.md"):
+        raw_names.append(md_path.stem)
+    for pdf_path in output_dir.glob("*.pdf"):
+        raw_names.append(pdf_path.stem)
+
+    for name in raw_names:
+        if not name:
+            continue
+        norm = _normalize_title_key(name)
+        if norm:
+            keys.append(norm)
+        parts = re.split(r"[^a-z0-9]+", str(name).lower())
+        filtered = [p for p in parts if p]
+        if filtered:
+            keys.append("".join(filtered))
+            keys.extend(filtered)
+    return list(dict.fromkeys([k for k in keys if k]))
+
+
+def _looks_like_same_paper(candidates: list[str], title_key: str, pdf_key: str) -> bool:
+    """厳格な一致条件で、対象フォルダが同一論文と見なせるかを判定する。"""
+    if not candidates:
+        return False
+    if not title_key and not pdf_key:
+        return False
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if candidate == title_key or candidate == pdf_key:
+            return True
+        if title_key and pdf_key:
+            if candidate in title_key and len(candidate) >= 8:
+                return True
+            if candidate in pdf_key and len(candidate) >= 8:
+                return True
+            if title_key.startswith(candidate) and len(candidate) >= 8:
+                return True
+            if title_key.endswith(candidate) and len(candidate) >= 8:
+                return True
+            if pdf_key.startswith(candidate) and len(candidate) >= 8:
+                return True
+            if pdf_key.endswith(candidate) and len(candidate) >= 8:
+                return True
+    return False
+
+
+def _infer_state_from_database(
+    output_dir: Path, project_root: Optional[Path] = None
+) -> Optional[dict]:
+    """analysis_state.json がない場合に SQLite で解析済みかどうかを推定する。"""
+    if project_root is None:
+        project_root = Path(__file__).parent.parent
+
+    db_path = project_root / "paper_memory.db"
+    if not db_path.exists():
+        return None
+
+    md_candidates = [p for p in output_dir.glob("*.md") if p.is_file()]
+    md_exists = bool(md_candidates)
+    candidate_keys = _candidate_keys_from_path(output_dir)
+
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        papers = conn.execute("SELECT id, title, pdf_path FROM papers").fetchall()
+        matched = None
+        for paper in papers:
+            title_key = _normalize_title_key(paper["title"])
+            pdf_key = _normalize_title_key(paper["pdf_path"])
+            if not _looks_like_same_paper(candidate_keys, title_key, pdf_key):
+                continue
+            matched = paper
+            break
+
+        if not matched:
+            return None
+
+        paper_id = matched["id"]
+        note_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM notes WHERE paper_id = ?",
+            (paper_id,),
+        ).fetchone()["c"]
+        ref_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM references_table WHERE cited_by = ? OR cited_by_pdf = ?",
+            (matched["title"], matched["pdf_path"]),
+        ).fetchone()["c"]
+
+    # ここが重要: Markdown だけでは完了扱いしない。DB にノート/参考文献が登録済みであることが必要。
+    if note_count <= 0 and ref_count <= 0:
+        return None
+
+    inferred_state = {
+        "status": "completed",
+        "docling_completed": md_exists,
+        "completed_turns": [1, 2, 3],
+        "partial_notes": [],
+        "partial_refs": [],
+        "error_message": None,
+        "started_at": None,
+        "updated_at": datetime.now().isoformat(),
+        "reconciled_from_db": True,
+        "db_paper_id": paper_id,
+        "db_paper_title": matched["title"],
+        "db_note_count": note_count,
+        "db_ref_count": ref_count,
+    }
+    return inferred_state
+
+
+def load_state(output_dir: Path, project_root: Optional[Path] = None) -> dict:
+    """状態管理ファイルを読み込む。存在しない場合は DB/Markdown から推定する。"""
     state_path = output_dir / "analysis_state.json"
     if state_path.exists():
         try:
             with open(state_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                loaded = json.load(f)
+                loaded.setdefault("status", "new")
+                loaded.setdefault("docling_completed", False)
+                loaded.setdefault("completed_turns", [])
+                loaded.setdefault("partial_notes", [])
+                loaded.setdefault("partial_refs", [])
+                loaded.setdefault("error_message", None)
+                loaded.setdefault("started_at", None)
+                loaded.setdefault("updated_at", None)
+                loaded.setdefault("last_step", None)
+                return loaded
         except Exception:
             pass
+
+    inferred_state = _infer_state_from_database(output_dir, project_root=project_root)
+    if inferred_state is not None:
+        save_state(output_dir, inferred_state)
+        return inferred_state
+
     return {
         "status": "new",
         "docling_completed": False,
@@ -56,8 +197,10 @@ def load_state(output_dir: Path) -> dict:
         "partial_refs": [],
         "error_message": None,
         "started_at": None,
-        "updated_at": None
+        "updated_at": None,
+        "last_step": None,
     }
+
 
 def save_state(output_dir: Path, state: dict) -> None:
     """状態管理ファイルを保存する。"""
@@ -67,11 +210,14 @@ def save_state(output_dir: Path, state: dict) -> None:
     with open(state_path, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
-def get_analysis_prompt(markdown_text: str, turn_number: int, source_paper_info: dict) -> str:
+
+def get_analysis_prompt(
+    markdown_text: str, turn_number: int, source_paper_info: dict
+) -> str:
     """ターン番号に応じた解析プロンプトを構築する"""
     lang_name = get_language_name(DEFAULT_LANGUAGE)
     paper_title = source_paper_info.get("title", "Unknown Title")
-    
+
     # 共通の制約指示
     system_instruction = (
         f"You are a professional research assistant. Analyze the provided research paper markdown and extract academic knowledge notes.\n"
@@ -208,6 +354,7 @@ Paper markdown:
 {markdown_text[:60000]}
 """
 
+
 def analyze_paper(
     pdf_path_str: str,
     status_callback: Optional[Callable[[str, str, Optional[dict]], None]] = None,
@@ -217,22 +364,37 @@ def analyze_paper(
 ) -> dict:
     """PDF抽出、AI分析(3ターン)、DB登録までを一気通貫で実行する"""
     pdf_path = Path(pdf_path_str)
-    
+
     # 論文名の決定
     stem = pdf_path.stem
-    safe_stem = stem.encode('ascii', 'ignore').decode('ascii')
+    safe_stem = stem.encode("ascii", "ignore").decode("ascii")
     if not safe_stem.strip():
         safe_stem = "paper"
-    clean_name = re.sub(r'[^a-zA-Z0-9\s_-]', '', safe_stem).strip().replace(' ', '_')
+    clean_name = re.sub(r"[^a-zA-Z0-9\s_-]", "", safe_stem).strip().replace(" ", "_")
     if len(clean_name) > 80:
-        clean_name = clean_name[:80].rstrip('_')
-        
+        clean_name = clean_name[:80].rstrip("_")
+
     project_root = Path(__file__).parent.parent
     output_dir = project_root / "extracted" / clean_name
-    
+
     # 状態のロード
     state = load_state(output_dir)
-    if force or state.get("status") == "new" or not resume:
+    if not force and state.get("status") == "completed" and not resume:
+        with sqlite3.connect(project_root / "paper_memory.db") as conn:
+            conn.row_factory = sqlite3.Row
+            paper_row = conn.execute(
+                "SELECT title FROM papers WHERE title = ?",
+                (state.get("db_paper_title") or ""),
+            ).fetchone()
+        if paper_row is not None:
+            return {
+                "status": "success",
+                "paper_title": paper_row["title"],
+                "notes_count": state.get("db_note_count", 0),
+                "refs_count": state.get("db_ref_count", 0),
+            }
+
+    if force:
         state = {
             "status": "processing",
             "pdf_path": str(pdf_path),
@@ -242,65 +404,112 @@ def analyze_paper(
             "partial_refs": [],
             "error_message": None,
             "started_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
+            "updated_at": datetime.now().isoformat(),
+            "last_step": None,
         }
-    
+    elif state.get("status") in {"new", None} or not resume:
+        state = {
+            "status": "processing",
+            "pdf_path": str(pdf_path),
+            "docling_completed": False,
+            "completed_turns": [],
+            "partial_notes": [],
+            "partial_refs": [],
+            "error_message": None,
+            "started_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "last_step": None,
+        }
+
     state["status"] = "processing"
+    state.setdefault("partial_notes", [])
+    state.setdefault("partial_refs", [])
+    state.setdefault("completed_turns", [])
+    state.setdefault("docling_completed", False)
+    state["pdf_path"] = str(pdf_path)
+    if resume and state.get("last_step") is None:
+        state["last_step"] = "extracting"
+    state["updated_at"] = datetime.now().isoformat()
     save_state(output_dir, state)
 
     try:
         # Step 1: PDF テキスト抽出 (Docling)
         md_file_path = output_dir / f"{clean_name}.md"
-        
+
         if not state["docling_completed"] or not md_file_path.exists():
+            state["last_step"] = "extracting"
+            state["status"] = "processing"
+            save_state(output_dir, state)
             if status_callback:
-                status_callback("extracting", "PDFからテキストと図表の抽出を実行中（これには数分かかる場合があります）...", None)
-            
+                status_callback(
+                    "extracting",
+                    "PDFからテキストと図表の抽出を実行中（これには数分かかる場合があります）...",
+                    None,
+                )
+
             # extractを実行
             result = extract(
                 pdf_path=pdf_path,
                 backend="docling",
                 analyze_tables=False,
                 base_dir="extracted",
-                progress_callback=lambda step, msg: status_callback(step, msg, None) if status_callback else None
+                progress_callback=lambda step, msg: (
+                    status_callback(step, msg, None) if status_callback else None
+                ),
             )
             state["docling_completed"] = True
+            state["last_step"] = "extracting_completed"
             save_state(output_dir, state)
-        
+
         markdown_text = md_file_path.read_text(encoding="utf-8")
-        
+
         # タイトル・著者等の初期情報抽出
         # 暫定的にファイル名から推定、または最初の1000文字から推測する
         source_paper_info = {
-            "title": stem.replace('_', ' ').replace('-', ' '),
+            "title": stem.replace("_", " ").replace("-", " "),
             "authors": [],
             "year": None,
             "doi": "",
             "journal": "",
-            "pdf_path": f"pdf/{pdf_path.name}"
+            "pdf_path": f"pdf/{pdf_path.name}",
         }
 
         if stop_after_extract:
-            return {"paper_title": source_paper_info["title"], "notes_count": 0, "refs_count": 0}
+            return {
+                "paper_title": source_paper_info["title"],
+                "notes_count": 0,
+                "refs_count": 0,
+            }
 
         # 3ターンのループ
         for turn in [1, 2, 3]:
             if turn in state["completed_turns"]:
                 continue
-                
+
+            state["last_step"] = f"turn_{turn}"
+            state["status"] = "processing"
+            save_state(output_dir, state)
             if status_callback:
-                status_callback(f"turn_{turn}", f"AI解析ステップ {turn}/3 を実行中...", {"completed_turns": state["completed_turns"]})
-            
+                status_callback(
+                    f"turn_{turn}",
+                    f"AI解析ステップ {turn}/3 を実行中...",
+                    {"completed_turns": state["completed_turns"]},
+                )
+
             prompt = get_analysis_prompt(markdown_text, turn, source_paper_info)
-            response = generate_content_with_retry(model=ANALYSIS_MODEL, contents=prompt, max_retries=2)
-            
+            response = generate_content_with_retry(
+                model=ANALYSIS_MODEL, contents=prompt, max_retries=2
+            )
+
             if not response or not response.text:
                 raise RuntimeError(f"AIからの応答が空です (Turn {turn})")
-                
+
             parsed = _extract_json(response.text)
             if not parsed:
-                raise RuntimeError(f"AIの出力をJSONとしてパースできませんでした (Turn {turn})")
-            
+                raise RuntimeError(
+                    f"AIの出力をJSONとしてパースできませんでした (Turn {turn})"
+                )
+
             # 各ターンの結果を状態にマージ
             if turn == 1:
                 # 論文書誌情報を更新
@@ -319,13 +528,18 @@ def analyze_paper(
                     state["partial_notes"].extend(parsed["notes"])
                 if "references" in parsed:
                     state["partial_refs"].extend(parsed["references"])
-            
+
             state["completed_turns"].append(turn)
+            state["last_step"] = f"turn_{turn}_completed"
             save_state(output_dir, state)
 
         # 全てのAI解析が完了したらDB登録
         if status_callback:
-            status_callback("registering", "データベースへノートおよび参考文献を登録中...", {"completed_turns": state["completed_turns"]})
+            status_callback(
+                "registering",
+                "データベースへノートおよび参考文献を登録中...",
+                {"completed_turns": state["completed_turns"]},
+            )
 
         store = NoteStore()
         ref_store = ReferenceStore()
@@ -336,7 +550,7 @@ def analyze_paper(
                 doi = fetch_doi_by_title_and_authors(
                     source_paper_info["title"],
                     source_paper_info.get("authors"),
-                    source_paper_info.get("year")
+                    source_paper_info.get("year"),
                 )
                 if doi:
                     source_paper_info["doi"] = doi
@@ -350,7 +564,7 @@ def analyze_paper(
             # element_type の整合性をチェック
             note_obj = PaperNote.from_dict(raw_note)
             notes_to_add.append(note_obj)
-            
+
         added_notes = store.add_batch(notes_to_add)
 
         # 参考文献の追加
@@ -362,9 +576,7 @@ def analyze_paper(
             if raw_ref.get("title") and not raw_ref.get("doi"):
                 try:
                     r_doi = fetch_doi_by_title_and_authors(
-                        raw_ref["title"],
-                        raw_ref.get("authors"),
-                        raw_ref.get("year")
+                        raw_ref["title"], raw_ref.get("authors"), raw_ref.get("year")
                     )
                     if r_doi:
                         raw_ref["doi"] = r_doi
@@ -376,12 +588,14 @@ def analyze_paper(
 
         # 状態の更新
         state["status"] = "completed"
+        state["last_step"] = "completed"
         save_state(output_dir, state)
 
         # 自動リンク評価のトリガー
         try:
             # autolink
             from .autolinker import evaluate_links
+
             # 登録された各ノートを周辺候補と自動リンク
             for note in added_notes:
                 candidates = store.find_neighbors(note.id, n_results=10)
@@ -389,7 +603,9 @@ def analyze_paper(
                     evaluations = evaluate_links(note.to_dict(), candidates)
                     for ev in evaluations:
                         if ev.get("is_linked"):
-                            store.add_link(note.id, ev.get("target_id"), ev.get("reason", ""))
+                            store.add_link(
+                                note.id, ev.get("target_id"), ev.get("reason", "")
+                            )
         except Exception as e:
             print(f"[WARNING] 自動リンク生成に失敗しました: {e}", file=sys.stderr)
 
@@ -397,13 +613,15 @@ def analyze_paper(
             "status": "success",
             "paper_title": source_paper_info["title"],
             "notes_count": len(added_notes),
-            "refs_count": added_refs_count
+            "refs_count": added_refs_count,
         }
 
     except Exception as e:
         import traceback
+
         error_msg = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
         state["status"] = "error"
         state["error_message"] = error_msg
+        state["last_step"] = state.get("last_step") or "error"
         save_state(output_dir, state)
         raise e
