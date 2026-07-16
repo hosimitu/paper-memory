@@ -44,6 +44,6 @@ AUTOLINK_MODEL = "gemini-3.1-flash-lite"
 # [使用箇所] paper_memory/store.py
 RERANK_MODEL = "gemini-3.1-flash-lite"
 
-# 論文解析（Web UIからのAPI経由解析）で使用するモデル
+# 論文解析（Web UIからのAPI経由解析）で使用するモデル ("gemini-3.5-flash あたりがbest)
 # [使用箇所] paper_memory/analyzer.py
 ANALYSIS_MODEL = "gemini-3.1-flash-lite"
