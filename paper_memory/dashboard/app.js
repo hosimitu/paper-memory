@@ -217,6 +217,7 @@ class App {
         const titles = {
             overview: i18n.t('nav.overview'),
             notes: i18n.t('nav.notes'),
+            upload: i18n.t('nav.upload'),
             papers: i18n.t('nav.papers'),
             references: i18n.t('nav.references'),
             search: i18n.t('nav.search'),
@@ -229,6 +230,7 @@ class App {
             switch (view) {
                 case 'overview': await this.renderOverview(); break;
                 case 'notes': await this.renderNotes(params); break;
+                case 'upload': await this.renderUpload(); break;
                 case 'papers': await this.renderPapers(); break;
                 case 'references': await this.renderReferences(); break;
                 case 'search': await this.renderSearch(params); break;
@@ -810,6 +812,127 @@ class App {
         }
 
         lucide.createIcons();
+    }
+
+    // ==========================================
+    // アップロード画面
+    // ==========================================
+    async renderUpload() {
+        const tpl = document.getElementById('tpl-upload');
+        if (!tpl) {
+            this.contentArea.innerHTML = '<div class="error-msg">テンプレートが見つかりません (tpl-upload)</div>';
+            return;
+        }
+        this.contentArea.innerHTML = '';
+        this.contentArea.appendChild(tpl.content.cloneNode(true));
+        i18n.applyTranslations(this.contentArea);
+
+        const dropzone = document.getElementById('upload-dropzone');
+        const fileInput = document.getElementById('upload-file-input');
+        const queueList = document.getElementById('queue-list');
+
+        if (dropzone && fileInput) {
+            dropzone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', async (e) => {
+                if (e.target.files.length > 0) {
+                    const h3 = dropzone.querySelector('h3');
+                    if (h3) h3.textContent = i18n.currentLang() === 'ja' ? 'アップロード中...' : 'Uploading...';
+                    await window._handlePdfUpload(e.target.files[0]);
+                    if (h3) h3.textContent = i18n.t('upload.dropzone_title');
+                    fileInput.value = '';
+                    // キュー再読み込み
+                    this.switchView('upload', {}, false);
+                }
+            });
+
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('dragover');
+            });
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('dragover');
+            });
+            dropzone.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+                if (files.length > 0) {
+                    const h3 = dropzone.querySelector('h3');
+                    if (h3) h3.textContent = i18n.currentLang() === 'ja' ? 'アップロード中...' : 'Uploading...';
+                    await window._handlePdfUpload(files[0]);
+                    if (h3) h3.textContent = i18n.t('upload.dropzone_title');
+                    this.switchView('upload', {}, false);
+                }
+            });
+        }
+
+        // キュー読み込み
+        if (queueList) {
+            try {
+                const resp = await fetch('/api/queue');
+                const items = await resp.json();
+                if (items && items.length > 0) {
+                    queueList.innerHTML = '';
+                    items.forEach(item => {
+                        const el = document.createElement('div');
+                        el.className = 'queue-item';
+                        const dt = new Date((item.updated_at || item.started_at) * 1000).toLocaleString();
+                        const turns = (item.completed_turns || []).length;
+                        el.innerHTML = `
+                            <div class="queue-item-info">
+                                <div class="queue-item-title">${this._esc(item.paper_name)}</div>
+                                <div class="queue-item-meta">ステータス: ${this._esc(item.status)} | 完了Turn: ${turns} | 更新: ${dt}</div>
+                            </div>
+                            <div class="queue-item-actions">
+                                <button class="btn-resume" data-pdf="${this._esc(item.pdf_path)}">${i18n.t('upload.resume')}</button>
+                                <button class="btn-delete" data-id="${this._esc(item.id)}">${i18n.t('upload.delete')}</button>
+                            </div>
+                        `;
+                        queueList.appendChild(el);
+                    });
+
+                    queueList.querySelectorAll('.btn-resume').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            window._startAnalysis(btn.dataset.pdf, true, false, false);
+                        });
+                    });
+                    queueList.querySelectorAll('.btn-delete').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            const id = btn.dataset.id;
+                            const action = await window._showConfirmDialog(i18n.t('upload.delete_confirm'), [
+                                { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: 'cancel' },
+                                { label: i18n.t('upload.delete'), value: 'delete', primary: true }
+                            ]);
+                            if (action === 'delete') {
+                                await fetch('/api/delete_queue_item', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id })
+                                });
+                                this.switchView('upload', {}, false);
+                            }
+                        });
+                    });
+                } else {
+                    queueList.innerHTML = `<p style="color: var(--text-muted);">${i18n.currentLang() === 'ja' ? 'キューは空です' : 'Queue is empty'}</p>`;
+                }
+            } catch(e) {
+                console.error(e);
+                queueList.innerHTML = '<p style="color: red;">Error loading queue</p>';
+            }
+        }
+
+        lucide.createIcons();
+    }
+
+    _esc(unsafe) {
+        if (!unsafe) return '';
+        return String(unsafe)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     async renderQA(params = {}) {
@@ -1482,6 +1605,19 @@ function initPdfDropzone(appInstance) {
             return;
         }
 
+        async function askAnalysisMode() {
+            return await showConfirmDialog(
+                i18n.currentLang() === 'ja' 
+                    ? "PDFのアップロードが完了しました。次にどうしますか？" 
+                    : "PDF upload complete. What would you like to do next?",
+                [
+                    { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: null },
+                    { label: i18n.t('upload.option_markdown_only'), value: 'extract' },
+                    { label: i18n.t('upload.option_full_analysis'), value: 'full', primary: true }
+                ]
+            );
+        }
+
         if (uploadResult.status === 'already_registered') {
             const action = await showConfirmDialog(
                 i18n.currentLang() === 'ja' 
@@ -1493,7 +1629,8 @@ function initPdfDropzone(appInstance) {
                 ]
             );
             if (action === 'force') {
-                startAnalysis(uploadResult.pdf_path, false, true);
+                const mode = await askAnalysisMode();
+                if (mode) startAnalysis(uploadResult.pdf_path, false, true, mode === 'extract');
             }
         } else if (uploadResult.status === 'interrupted') {
             const action = await showConfirmDialog(
@@ -1507,13 +1644,15 @@ function initPdfDropzone(appInstance) {
                 ]
             );
             if (action === 'resume') {
-                startAnalysis(uploadResult.pdf_path, true, false);
+                startAnalysis(uploadResult.pdf_path, true, false, false);
             } else if (action === 'force') {
-                startAnalysis(uploadResult.pdf_path, false, true);
+                const mode = await askAnalysisMode();
+                if (mode) startAnalysis(uploadResult.pdf_path, false, true, mode === 'extract');
             }
         } else {
             // 新規
-            startAnalysis(uploadResult.pdf_path, false, false);
+            const mode = await askAnalysisMode();
+            if (mode) startAnalysis(uploadResult.pdf_path, false, false, mode === 'extract');
         }
     }
 
@@ -1539,7 +1678,7 @@ function initPdfDropzone(appInstance) {
     }
 
     // 解析開始
-    function startAnalysis(pdfPath, resume, force) {
+    function startAnalysis(pdfPath, resume, force, stopAfterExtract = false) {
         analysisModal.classList.add('active');
         resetAnalysisModal();
 
@@ -1555,7 +1694,7 @@ function initPdfDropzone(appInstance) {
         fetch('/api/analyze_paper', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pdf_path: pdfPath, resume, force })
+            body: JSON.stringify({ pdf_path: pdfPath, resume, force, stop_after_extract: stopAfterExtract })
         }).then(response => {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -1601,7 +1740,7 @@ function initPdfDropzone(appInstance) {
             statusText.textContent = data.message || '';
             updateStepUI(data.step);
 
-            const stepOrder = ['uploading', 'extracting', 'turn_1', 'turn_2', 'turn_3', 'registering'];
+            const stepOrder = ['uploading', 'extracting_init', 'extracting_convert', 'extracting_images', 'extracting_markdown', 'turn_1', 'turn_2', 'turn_3', 'registering'];
             const idx = stepOrder.indexOf(data.step);
             if (idx >= 0) {
                 const pct = Math.round(((idx + 0.5) / stepOrder.length) * 100);
@@ -1609,12 +1748,22 @@ function initPdfDropzone(appInstance) {
             }
         } else if (event === 'complete') {
             progressFill.style.width = '100%';
-            statusText.textContent = i18n.t('analysis.complete');
-            analysisModal.querySelectorAll('.analysis-step').forEach(s => {
-                s.classList.remove('active');
-                s.classList.add('completed');
-            });
-            showAnalysisResult(data);
+            if (data.status === 'extracted_only') {
+                statusText.textContent = i18n.currentLang() === 'ja' ? 'Markdown抽出が完了しました' : 'Markdown extraction complete';
+                setTimeout(() => {
+                    analysisModal.classList.remove('active');
+                    if (appInstance && appInstance.currentView === 'upload') {
+                        appInstance.switchView('upload');
+                    }
+                }, 2000);
+            } else {
+                statusText.textContent = i18n.t('analysis.complete');
+                analysisModal.querySelectorAll('.analysis-step').forEach(s => {
+                    s.classList.remove('active');
+                    s.classList.add('completed');
+                });
+                showAnalysisResult(data);
+            }
         } else if (event === 'error') {
             showAnalysisError(data.error, data.resumable, data.pdf_path);
         }
@@ -1622,7 +1771,7 @@ function initPdfDropzone(appInstance) {
 
     function updateStepUI(currentStep) {
         const steps = analysisModal.querySelectorAll('.analysis-step');
-        const stepOrder = ['uploading', 'extracting', 'turn_1', 'turn_2', 'turn_3', 'registering'];
+        const stepOrder = ['uploading', 'extracting_init', 'extracting_convert', 'extracting_images', 'extracting_markdown', 'turn_1', 'turn_2', 'turn_3', 'registering'];
         const currentIdx = stepOrder.indexOf(currentStep);
 
         steps.forEach((step, i) => {
@@ -1670,6 +1819,11 @@ function initPdfDropzone(appInstance) {
             };
         }
     }
+
+    // renderUploadなどクラスメソッドから呼べるようにグローバル公開
+    window._handlePdfUpload = handlePdfUpload;
+    window._startAnalysis = startAnalysis;
+    window._showConfirmDialog = showConfirmDialog;
 }
 
 // Start the app

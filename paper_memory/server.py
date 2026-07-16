@@ -401,6 +401,28 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 }
             elif path == "/api/qa/formats":
                 data = list_formats()
+            elif path == "/api/queue":
+                from pathlib import Path
+                from .analyzer import load_state
+                project_root = Path(__file__).parent.parent
+                extracted_dir = project_root / "extracted"
+                queue_items = []
+                if extracted_dir.exists():
+                    for subdir in extracted_dir.iterdir():
+                        if subdir.is_dir():
+                            state = load_state(subdir)
+                            if state.get("status") != "completed":
+                                queue_items.append({
+                                    "id": subdir.name,
+                                    "paper_name": subdir.name,
+                                    "pdf_path": state.get("pdf_path"),
+                                    "status": state.get("status"),
+                                    "docling_completed": state.get("docling_completed", False),
+                                    "completed_turns": state.get("completed_turns", []),
+                                    "started_at": state.get("started_at"),
+                                    "updated_at": state.get("updated_at")
+                                })
+                data = queue_items
             else:
                 status = 404
                 data = {"error": "Endpoint not found"}
@@ -653,6 +675,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 pdf_path = post_data.get("pdf_path", "")
                 resume = post_data.get("resume", False)
                 force = post_data.get("force", False)
+                stop_after_extract = post_data.get("stop_after_extract", False)
 
                 if not pdf_path:
                     status_code = 400
@@ -684,13 +707,22 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                             pdf_path_str=pdf_path,
                             status_callback=status_callback,
                             resume=resume,
-                            force=force
+                            force=force,
+                            stop_after_extract=stop_after_extract
                         )
-                        send_sse("complete", {
-                            "paper_title": result["paper_title"],
-                            "notes_count": result["notes_count"],
-                            "refs_count": result["refs_count"]
-                        })
+                        if stop_after_extract:
+                            send_sse("complete", {
+                                "status": "extracted_only",
+                                "paper_title": result.get("paper_title", ""),
+                                "notes_count": 0,
+                                "refs_count": 0
+                            })
+                        else:
+                            send_sse("complete", {
+                                "paper_title": result.get("paper_title", ""),
+                                "notes_count": result.get("notes_count", 0),
+                                "refs_count": result.get("refs_count", 0)
+                            })
                     except Exception as err:
                         send_sse("error", {
                             "error": str(err),
@@ -698,6 +730,27 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                             "pdf_path": pdf_path
                         })
                     return
+
+            elif path == "/api/delete_queue_item":
+                item_id = post_data.get("id")
+                if not item_id:
+                    status_code = 400
+                    data = {"error": "ID is required"}
+                else:
+                    import shutil
+                    from pathlib import Path
+                    project_root = Path(__file__).parent.parent
+                    item_dir = project_root / "extracted" / item_id
+                    if item_dir.exists() and item_dir.is_dir():
+                        try:
+                            shutil.rmtree(item_dir)
+                            data = {"status": "success"}
+                        except Exception as e:
+                            status_code = 500
+                            data = {"error": str(e)}
+                    else:
+                        status_code = 404
+                        data = {"error": "Item not found"}
 
             elif path == "/api/qa":
                 query_text = post_data.get("query", "")

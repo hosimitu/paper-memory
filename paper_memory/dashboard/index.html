@@ -32,6 +32,10 @@
                     <i data-lucide="sticky-note"></i>
                     <span data-i18n="nav.notes">知識ノート</span>
                 </a>
+                <a href="#" class="nav-item" data-view="upload">
+                    <i data-lucide="upload-cloud"></i>
+                    <span data-i18n="nav.upload">PDFアップロード</span>
+                </a>
                 <a href="#" class="nav-item" data-view="papers">
                     <i data-lucide="book-open"></i>
                     <span data-i18n="nav.papers">登録論文</span>
@@ -190,9 +194,21 @@
                             <div class="step-indicator"><i data-lucide="upload"></i></div>
                             <span data-i18n="analysis.uploading">アップロード</span>
                         </div>
-                        <div class="analysis-step" data-step="extracting">
+                        <div class="analysis-step" data-step="extracting_init">
+                            <div class="step-indicator"><i data-lucide="loader"></i></div>
+                            <span data-i18n="analysis.extracting_init">初期化</span>
+                        </div>
+                        <div class="analysis-step" data-step="extracting_convert">
                             <div class="step-indicator"><i data-lucide="file-search"></i></div>
-                            <span data-i18n="analysis.extracting">テキスト抽出</span>
+                            <span data-i18n="analysis.extracting_convert">PDF解析</span>
+                        </div>
+                        <div class="analysis-step" data-step="extracting_images">
+                            <div class="step-indicator"><i data-lucide="image"></i></div>
+                            <span data-i18n="analysis.extracting_images">画像処理</span>
+                        </div>
+                        <div class="analysis-step" data-step="extracting_markdown">
+                            <div class="step-indicator"><i data-lucide="file-text"></i></div>
+                            <span data-i18n="analysis.extracting_markdown">Markdown生成</span>
                         </div>
                         <div class="analysis-step" data-step="turn_1">
                             <div class="step-indicator"><i data-lucide="brain"></i></div>
@@ -235,7 +251,26 @@
         </div>
     </div>
 
-    <script src="i18n.js"></script>
-    <script src="app.js?v=4"></script>
+
+    <template id="tpl-upload">
+        <div class="upload-view">
+            <div id="upload-dropzone" class="upload-dropzone">
+                <i data-lucide="upload-cloud" class="upload-icon"></i>
+                <h3 data-i18n="upload.dropzone_title">PDFをここにドロップ</h3>
+                <p data-i18n="upload.dropzone_desc">またはクリックしてファイルを選択</p>
+                <input type="file" id="upload-file-input" accept="application/pdf" style="display: none;">
+            </div>
+
+            <div class="queue-section">
+                <h3 data-i18n="upload.queue_title">処理待ちキュー (Markdown抽出済み)</h3>
+                <div id="queue-list" class="queue-list">
+                    <!-- Queue items will be injected here -->
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="i18n.js?v=3"></script>
+    <script src="app.js?v=5"></script>
 </body>
 </html>

@@ -6,6 +6,7 @@ const i18nDict = {
     en: {
         "nav.overview": "Overview",
         "nav.notes": "Knowledge Notes",
+        "nav.upload": "Upload PDF",
         "nav.papers": "Papers",
         "nav.references": "References",
         "nav.search": "Semantic Search",
@@ -127,7 +128,10 @@ const i18nDict = {
 
         "analysis.title": "Analyzing paper...",
         "analysis.uploading": "Upload",
-        "analysis.extracting": "Text extraction",
+        "analysis.extracting_init": "Initialize",
+        "analysis.extracting_convert": "PDF Analysis",
+        "analysis.extracting_images": "Image Proc.",
+        "analysis.extracting_markdown": "MD Generation",
         "analysis.turn_1": "AI Analysis (1/3)",
         "analysis.turn_2": "AI Analysis (2/3)",
         "analysis.turn_3": "AI Analysis (3/3)",
@@ -136,11 +140,21 @@ const i18nDict = {
         "analysis.complete": "Complete!",
         "analysis.interrupted": "Processing was interrupted",
         "analysis.drop_pdf": "Drop PDF file to start analysis",
-        "analysis.confirm": "Confirm"
+        "analysis.confirm": "Confirm",
+        
+        "upload.dropzone_title": "Drop PDF here",
+        "upload.dropzone_desc": "or click to select a file",
+        "upload.queue_title": "Processing Queue (Markdown Extracted)",
+        "upload.resume": "Resume",
+        "upload.delete": "Delete",
+        "upload.delete_confirm": "Are you sure you want to delete this item? Extracted markdown will also be removed.",
+        "upload.option_markdown_only": "Extract Markdown only (add to queue)",
+        "upload.option_full_analysis": "Execute full AI analysis & Register"
     },
     ja: {
         "nav.overview": "概要",
         "nav.notes": "知識ノート",
+        "nav.upload": "PDFアップロード",
         "nav.papers": "登録論文",
         "nav.references": "参考文献",
         "nav.search": "セマンティック検索",
@@ -262,7 +276,10 @@ const i18nDict = {
 
         "analysis.title": "論文を解析中...",
         "analysis.uploading": "アップロード",
-        "analysis.extracting": "テキスト抽出",
+        "analysis.extracting_init": "初期化",
+        "analysis.extracting_convert": "PDF解析",
+        "analysis.extracting_images": "画像処理",
+        "analysis.extracting_markdown": "Markdown生成",
         "analysis.turn_1": "AI解析 (1/3)",
         "analysis.turn_2": "AI解析 (2/3)",
         "analysis.turn_3": "AI解析 (3/3)",
@@ -271,7 +288,16 @@ const i18nDict = {
         "analysis.complete": "完了！",
         "analysis.interrupted": "処理が中断されました",
         "analysis.drop_pdf": "PDFファイルをドロップして解析を開始",
-        "analysis.confirm": "確認"
+        "analysis.confirm": "確認",
+
+        "upload.dropzone_title": "PDFをここにドロップ",
+        "upload.dropzone_desc": "またはクリックしてファイルを選択",
+        "upload.queue_title": "処理待ちキュー (Markdown抽出済み)",
+        "upload.resume": "再開",
+        "upload.delete": "削除",
+        "upload.delete_confirm": "本当にこのアイテムを削除しますか？抽出済みのMarkdownも削除されます。",
+        "upload.option_markdown_only": "Markdown変換のみ実行 (キューに追加)",
+        "upload.option_full_analysis": "AI解析・登録まで実行"
     }
 };
 

@@ -40,6 +40,7 @@ class DoclingBackend(ExtractorBackend):
         output_dir: Path,
         analyze_tables: bool = False,
         images_scale: float = 3.0,
+        progress_callback = None,
         **options,
     ) -> ExtractionResult:
         """
@@ -77,6 +78,8 @@ class DoclingBackend(ExtractorBackend):
         try:
             shutil.copy2(pdf_path, tmp_pdf_path)
 
+            if progress_callback:
+                progress_callback("extracting_init", "初期化中...")
             # 1. パイプライン設定
             pipeline_options = PdfPipelineOptions()
             pipeline_options.generate_picture_images = True  # 図を画像化
@@ -86,6 +89,8 @@ class DoclingBackend(ExtractorBackend):
             pipeline_options.images_scale = images_scale
 
             # 2. 変換実行
+            if progress_callback:
+                progress_callback("extracting_convert", "PDF解析中...")
             converter = DocumentConverter(format_options={
                 InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
             })
@@ -93,6 +98,8 @@ class DoclingBackend(ExtractorBackend):
             doc = result.document
 
             # 3. 画像ディレクトリ準備
+            if progress_callback:
+                progress_callback("extracting_images", "画像処理中...")
             image_dir = output_dir / "images"
             image_dir.mkdir(parents=True, exist_ok=True)
 
@@ -147,6 +154,8 @@ class DoclingBackend(ExtractorBackend):
                         print(f"  [docling] 画像を保存しました: {filename}")
 
             # 5. Markdown エクスポート
+            if progress_callback:
+                progress_callback("extracting_markdown", "Markdown生成中...")
             markdown_content = doc.export_to_markdown(
                 image_placeholder="![image](images/{image_id}.png)"
             )

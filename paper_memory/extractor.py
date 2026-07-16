@@ -48,6 +48,7 @@ def extract(
     analyze_tables: bool = False,
     light_mode: bool = False,
     base_dir: str = "extracted",
+    progress_callback: Callable[[float, str], None] | None = None,
     **options,
 ) -> ExtractionResult:
     """
@@ -59,6 +60,7 @@ def extract(
         analyze_tables: True の場合、docling バックエンドで表画像を LLM 解析する
         light_mode:     marker バックエンド使用時に CPU のみ・OCR なしで実行
         base_dir:       出力先のベースディレクトリ（デフォルト: "extracted"）
+        progress_callback: 進捗報告用コールバック (progress_percentage: float, status: str)
 
     Returns:
         ExtractionResult: 抽出結果（markdown, images, table_images, output_dir）
@@ -84,6 +86,7 @@ def extract(
             pdf_path,
             output_dir,
             analyze_tables=analyze_tables,
+            progress_callback=progress_callback,
             **options,
         )
     elif backend == "marker":

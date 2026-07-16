@@ -213,6 +213,7 @@ def analyze_paper(
     status_callback: Optional[Callable[[str, str, Optional[dict]], None]] = None,
     resume: bool = False,
     force: bool = False,
+    stop_after_extract: bool = False,
 ) -> dict:
     """PDF抽出、AI分析(3ターン)、DB登録までを一気通貫で実行する"""
     pdf_path = Path(pdf_path_str)
@@ -260,7 +261,8 @@ def analyze_paper(
                 pdf_path=pdf_path,
                 backend="docling",
                 analyze_tables=False,
-                base_dir="extracted"
+                base_dir="extracted",
+                progress_callback=lambda step, msg: status_callback(step, msg, None) if status_callback else None
             )
             state["docling_completed"] = True
             save_state(output_dir, state)
@@ -277,6 +279,9 @@ def analyze_paper(
             "journal": "",
             "pdf_path": f"pdf/{pdf_path.name}"
         }
+
+        if stop_after_extract:
+            return {"paper_title": source_paper_info["title"], "notes_count": 0, "refs_count": 0}
 
         # 3ターンのループ
         for turn in [1, 2, 3]:
