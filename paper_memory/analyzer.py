@@ -12,6 +12,24 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Callable
 
+
+def _parse_json_field(value):
+    """DB に保存された JSON 文字列を安全にデコードする。"""
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text.startswith(("{", "[")):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return text
+        return text
+    return value
+
+
 from .config import DEFAULT_LANGUAGE, get_language_name
 from .ai_models import ANALYSIS_MODEL
 from .gemini_client import generate_content_with_retry
@@ -119,7 +137,12 @@ def _infer_state_from_database(
 
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
-        papers = conn.execute("SELECT id, title, pdf_path FROM papers").fetchall()
+
+        # 【修正点1】JSONで必要となるカラム(authors, year, doi, journal)をSELECT文に明記
+        papers = conn.execute(
+            "SELECT id, title, pdf_path, authors, year, doi, journal FROM papers"
+        ).fetchall()
+
         matched = None
         for paper in papers:
             title_key = _normalize_title_key(paper["title"])
@@ -133,33 +156,83 @@ def _infer_state_from_database(
             return None
 
         paper_id = matched["id"]
-        note_count = conn.execute(
-            "SELECT COUNT(*) AS c FROM notes WHERE paper_id = ?",
-            (paper_id,),
-        ).fetchone()["c"]
-        ref_count = conn.execute(
-            "SELECT COUNT(*) AS c FROM references_table WHERE cited_by = ? OR cited_by_pdf = ?",
-            (matched["title"], matched["pdf_path"]),
-        ).fetchone()["c"]
 
-    # ここが重要: Markdown だけでは完了扱いしない。DB にノート/参考文献が登録済みであることが必要。
+        # notesとreferences_tableからレコードを取得（ORDER BYで順序を保証）
+        note_rows = conn.execute(
+            "SELECT * FROM notes WHERE paper_id = ? ORDER BY timestamp",
+            (paper_id,),
+        ).fetchall()
+        ref_rows = conn.execute(
+            "SELECT * FROM references_table WHERE cited_by = ? OR cited_by_pdf = ? ORDER BY created_at",
+            (matched["title"], matched["pdf_path"]),
+        ).fetchall()
+
+    note_count = len(note_rows)
+    ref_count = len(ref_rows)
+
+    # Markdown があっても、DBに成果物（ノートや文献）がなければ未完了とする
     if note_count <= 0 and ref_count <= 0:
         return None
 
+    # 【修正点2】提示されたJSONのネスト構造（en/local）に合わせてマッピング
+    partial_notes = []
+    for row in note_rows:
+        note_payload = {
+            "content": _parse_json_field(
+                row["content"]
+            ),  # 内部で {"en": "...", "local": "..."} を想定
+            "element_type": row["element_type"],
+            "keywords": _parse_json_field(row["keywords"])
+            or [],  # 内部で [{"en": "...", "local": "..."}, ...] を想定
+            "context": _parse_json_field(
+                row["context"]
+            ),  # 内部で {"en": "...", "local": "..."} を想定
+            "tags": _parse_json_field(row["tags"]) or [],
+            "source_paper": {
+                "title": matched["title"],
+                "authors": _parse_json_field(matched["authors"]) or [],
+                "year": matched["year"],
+                "doi": matched["doi"] or "",
+                "journal": matched["journal"] or "",
+                "pdf_path": matched["pdf_path"] or "",
+            },
+        }
+        partial_notes.append(note_payload)
+
+    # 【修正点3】参考文献リストもJSONの形に合わせて構造化
+    partial_refs = []
+    for row in ref_rows:
+        ref_payload = {
+            "title": row["title"],
+            "authors": _parse_json_field(row["authors"]) or [],
+            "year": row["year"],
+            "doi": row["doi"] or "",
+            "journal": row["journal"] or "",
+            "relevance": row["relevance"],
+            "reason": _parse_json_field(
+                row["reason"]
+            ),  # 内部で {"en": "...", "local": "..."} を想定
+            "keywords": _parse_json_field(row["keywords"])
+            or [],  # 内部で [{"en": "...", "local": "..."}, ...] を想定
+            "cited_by": row["cited_by"] or matched["title"],
+            "cited_by_pdf": row["cited_by_pdf"] or matched["pdf_path"],
+        }
+        partial_refs.append(ref_payload)
+
+    # 【修正点4】目標とするJSONのメタデータ構造（pdf_path等）を最上位に配置
     inferred_state = {
         "status": "completed",
+        "pdf_path": matched["pdf_path"] or "",
         "docling_completed": md_exists,
         "completed_turns": [1, 2, 3],
-        "partial_notes": [],
-        "partial_refs": [],
+        "partial_notes": partial_notes,
+        "partial_refs": partial_refs,
         "error_message": None,
-        "started_at": None,
+        "started_at": note_rows[0]["timestamp"]
+        if note_count > 0
+        else None,  # 最初のノート時間から推定
         "updated_at": datetime.now().isoformat(),
-        "reconciled_from_db": True,
-        "db_paper_id": paper_id,
-        "db_paper_title": matched["title"],
-        "db_note_count": note_count,
-        "db_ref_count": ref_count,
+        "last_step": "completed",
     }
     return inferred_state
 
