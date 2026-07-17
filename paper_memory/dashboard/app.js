@@ -876,12 +876,24 @@ class App {
                     items.forEach(item => {
                         const el = document.createElement('div');
                         el.className = 'queue-item';
-                        const dt = new Date((item.updated_at || item.started_at) * 1000).toLocaleString();
+
+                        // 日時データの取り出し（更新日時、なければ開始日時）
+                        const rawValue = item.updated_at || item.started_at;
+                        let dateObj;
+
+                        if (rawValue) {
+                            // 数値型（秒単位のタイムスタンプ）なら1000倍してミリ秒に、文字列型（ISO形式等）ならそのままDateオブジェクト化
+                            dateObj = typeof rawValue === 'number' ? new Date(rawValue * 1000) : new Date(rawValue);
+                        }
+
+                        // 正しく変換できた場合はローカル日時に、データが無い、または不正な場合はハイフンを表示
+                        const dt = (dateObj && !isNaN(dateObj.getTime())) ? dateObj.toLocaleString() : '-';
+
                         const turns = (item.completed_turns || []).length;
                         el.innerHTML = `
                             <div class="queue-item-info">
                                 <div class="queue-item-title">${this._esc(item.paper_name)}</div>
-                                <div class="queue-item-meta">ステータス: ${this._esc(item.status)} | 完了Turn: ${turns} | 更新: ${dt}</div>
+                                <div class="queue-item-meta">Status : ${this._esc(item.status)} | Completed Turn : ${turns} | Last Updated : ${dt}</div>
                             </div>
                             <div class="queue-item-actions">
                                 <button class="btn-resume" data-pdf="${this._esc(item.pdf_path)}">${i18n.t('upload.resume')}</button>

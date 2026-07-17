@@ -457,7 +457,7 @@ def analyze_paper(
             conn.row_factory = sqlite3.Row
             paper_row = conn.execute(
                 "SELECT title FROM papers WHERE title = ?",
-                (state.get("db_paper_title") or ""),
+                (state.get("db_paper_title") or "",),
             ).fetchone()
         if paper_row is not None:
             return {
