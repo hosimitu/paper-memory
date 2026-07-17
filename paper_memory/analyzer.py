@@ -440,10 +440,15 @@ def analyze_paper(
 
     # 論文名の決定
     stem = pdf_path.stem
-    safe_stem = stem.encode("ascii", "ignore").decode("ascii")
-    if not safe_stem.strip():
+
+    # 【修正】ASCII変換を廃止し、éや各国語を残す設定に変更
+    # OSのファイルパスで禁止される記号（\ / : * ? " < > |）のみを排除します
+    safe_stem = re.sub(r"[^\w\s_-]", "", stem).strip()
+    if not safe_stem:
         safe_stem = "paper"
-    clean_name = re.sub(r"[^a-zA-Z0-9\s_-]", "", safe_stem).strip().replace(" ", "_")
+
+    # スペースをアンダースコアに統一
+    clean_name = safe_stem.replace(" ", "_")
     if len(clean_name) > 80:
         clean_name = clean_name[:80].rstrip("_")
 
