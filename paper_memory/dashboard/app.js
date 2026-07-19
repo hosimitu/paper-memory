@@ -890,10 +890,14 @@ class App {
                         const dt = (dateObj && !isNaN(dateObj.getTime())) ? dateObj.toLocaleString() : '-';
 
                         const turns = (item.completed_turns || []).length;
+                        let mdLink = '';
+                        if (item.has_markdown && item.markdown_url) {
+                            mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${item.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
+                        }
                         el.innerHTML = `
                             <div class="queue-item-info">
                                 <div class="queue-item-title">${this._esc(item.paper_name)}</div>
-                                <div class="queue-item-meta">Status : ${this._esc(item.status)} | Completed Turn : ${turns} | Last Updated : ${dt}</div>
+                                <div class="queue-item-meta">Status : ${this._esc(item.status)} | Completed Turn : ${turns} | Last Updated : ${dt}${mdLink}</div>
                             </div>
                             <div class="queue-item-actions">
                                 <button class="btn-resume" data-pdf="${this._esc(item.pdf_path)}">${i18n.t('upload.resume')}</button>

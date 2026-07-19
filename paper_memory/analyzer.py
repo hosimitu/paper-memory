@@ -553,6 +553,9 @@ def analyze_paper(
         }
 
         if stop_after_extract:
+            state["status"] = "completed"
+            state["last_step"] = "completed"
+            save_state(output_dir, state)
             return {
                 "paper_title": source_paper_info["title"],
                 "notes_count": 0,

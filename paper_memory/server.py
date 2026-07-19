@@ -534,6 +534,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         if subdir.is_dir():
                             state = load_state(subdir)
                             if state.get("status") != "completed":
+                                md_path = get_markdown_path(state.get("pdf_path"), state.get("title", subdir.name))
                                 queue_items.append(
                                     {
                                         "id": subdir.name,
@@ -548,6 +549,12 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                                         ),
                                         "started_at": state.get("started_at"),
                                         "updated_at": state.get("updated_at"),
+                                        "has_markdown": bool(md_path and md_path.exists()),
+                                        "markdown_url": (
+                                            f"/extracted/{md_path.parent.name}/{md_path.name}"
+                                            if md_path and md_path.exists()
+                                            else None
+                                        ),
                                     }
                                 )
                 data = queue_items
@@ -1010,27 +1017,20 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         # 5. 後処理（思考プロセスのカット）
                         answer_text = response.text
                         if "===Answer Start===" in answer_text:
-                            answer_text = answer_text.split("===Answer Start===")[
-                                -1
-                            ].strip()
+                            answer_text = answer_text.split("===Answer Start===")[-1].strip()
+                        elif "===Answer Start==" in answer_text:
+                            answer_text = answer_text.split("===Answer Start==")[-1].strip()
                         elif "===回答開始===" in answer_text:
                             # 互換性のため残す
-                            answer_text = answer_text.split("===回答開始===")[
-                                -1
-                            ].strip()
+                            answer_text = answer_text.split("===回答開始===")[-1].strip()
                         elif "提供された情報に" in answer_text:
                             parts = answer_text.split("提供された情報に", 1)
                             if len(parts) > 1:
                                 answer_text = "提供された情報に" + parts[1]
                         elif "Based on the provided information" in answer_text:
-                            parts = answer_text.split(
-                                "Based on the provided information", 1
-                            )
+                            parts = answer_text.split("Based on the provided information", 1)
                             if len(parts) > 1:
-                                answer_text = (
-                                    "Based on the provided information" + parts[1]
-                                )
-
+                                answer_text = "Based on the provided information" + parts[1]
                         # 引用文献リストの強制カット
                         if "📚 引用文献" in answer_text:
                             answer_text = answer_text.split("📚 引用文献")[0].strip()
