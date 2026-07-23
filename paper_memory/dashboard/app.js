@@ -1711,7 +1711,15 @@ function initPdfDropzone(appInstance) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pdf_path: pdfPath, resume, force, stop_after_extract: stopAfterExtract })
-        }).then(response => {
+        }).then(async response => {
+            if (!response.ok) {
+                let errMsg = 'Server error';
+                try {
+                    const data = await response.json();
+                    errMsg = data.error || errMsg;
+                } catch (e) {}
+                throw new Error(errMsg);
+            }
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';

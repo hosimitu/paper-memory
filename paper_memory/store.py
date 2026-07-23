@@ -369,6 +369,8 @@ class NoteStore:
 
     def _delete_extracted_markdown(self, pdf_path_str: str, title: str) -> None:
         import shutil
+        from .analyzer import clean_paper_name
+        
         extracted_dir = self.base_dir / "extracted"
         if not extracted_dir.exists():
             return
@@ -376,12 +378,7 @@ class NoteStore:
         target_dir = None
         if pdf_path_str:
             stem = Path(pdf_path_str).stem
-            safe_stem = stem.encode('ascii', 'ignore').decode('ascii')
-            if not safe_stem.strip():
-                safe_stem = "paper"
-            clean_name = re.sub(r'[^a-zA-Z0-9\s_-]', '', safe_stem).strip().replace(' ', '_')
-            if len(clean_name) > 80:
-                clean_name = clean_name[:80].rstrip('_')
+            clean_name = clean_paper_name(stem)
             
             candidate = extracted_dir / clean_name
             if candidate.exists() and candidate.is_dir():
