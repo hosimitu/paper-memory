@@ -285,9 +285,9 @@ def save_state(output_dir: Path, state: dict) -> None:
 
 
 def get_analysis_prompt(
-    markdown_text: str, turn_number: int, source_paper_info: dict
+    markdown_text: str, source_paper_info: dict
 ) -> str:
-    """ターン番号に応じた解析プロンプトを構築する"""
+    """全ての知識要素・書誌情報・参考文献を1ターンで抽出するプロンプトを構築する"""
     lang_name = get_language_name(DEFAULT_LANGUAGE)
     paper_title = source_paper_info.get("title", "Unknown Title")
 
@@ -300,16 +300,25 @@ def get_analysis_prompt(
         f"Output ONLY a raw JSON. Do not include markdown code fences, explanations, or introductory text."
     )
 
-    if turn_number == 1:
-        return f"""{system_instruction}
+    return f"""{system_instruction}
 
-[Turn 1 Task]
-Extract knowledge elements of the following types:
+[Task]
+Extract ALL of the following knowledge elements from the paper in a single pass:
 - `background` (Background, prior work, problems solved)
 - `method` (Methodology, design, algorithms, materials, parameters used)
 - `definition` (Crucial technical terms or system components defined in the paper)
+- `result` (Experimental results, performance data, comparison metrics)
+- `discussion` (Interpretation of results, justifications, why things worked)
+- `conclusion` (Overall findings and take-aways)
+- `limitation` (Identified bottlenecks, trade-offs, constraints)
+- `future_work` (Suggested directions, open research questions)
+- `insight` (Novel ideas, inspirations, or critical perspectives)
 
-Also, extract the accurate bibliographic information of the paper (title, authors, year, doi, journal) from the markdown text. The provided tentative title "{paper_title}" might be a filename. Please correct it to the actual title found in the text.
+Also:
+1. Extract the accurate bibliographic information of the paper (title, authors, year, doi, journal) from the markdown text.
+   The provided tentative title "{paper_title}" might be a filename. Please correct it to the actual title found in the text.
+2. Extract references (reading list) that are central or foundational to the methodology, or directly compared against in the paper.
+   Exclude casual background literature citations. If no critical references are found, return "references": [].
 
 Output JSON schema:
 {{
@@ -327,76 +336,7 @@ Output JSON schema:
         "en": "English summary of this note.",
         "local": "Summary in {lang_name}."
       }},
-      "element_type": "background" | "method" | "definition",
-      "keywords": [
-        {{ "en": "keyword", "local": "キーワード" }}
-      ],
-      "context": {{
-        "en": "Context description.",
-        "local": "Context description in {lang_name}."
-      }},
-      "tags": ["tag1", "tag2"]
-    }}
-  ]
-}}
-
-Paper markdown:
-{markdown_text[:60000]}
-"""
-    elif turn_number == 2:
-        return f"""{system_instruction}
-
-[Turn 2 Task]
-Extract knowledge elements of the following types:
-- `result` (Experimental results, performance data, comparison metrics)
-- `discussion` (Interpretation of results, justifications, why things worked)
-
-Output JSON schema:
-{{
-  "notes": [
-    {{
-      "content": {{
-        "en": "English summary of this note.",
-        "local": "Summary in {lang_name}."
-      }},
-      "element_type": "result" | "discussion",
-      "keywords": [
-        {{ "en": "keyword", "local": "キーワード" }}
-      ],
-      "context": {{
-        "en": "Context description.",
-        "local": "Context description in {lang_name}."
-      }},
-      "tags": ["tag1", "tag2"]
-    }}
-  ]
-}}
-
-Paper markdown:
-{markdown_text[:60000]}
-"""
-    else:  # Turn 3
-        return f"""{system_instruction}
-
-[Turn 3 Task]
-Extract knowledge elements of the following types:
-- `conclusion` (Overall findings and take-aways)
-- `limitation` (Identified bottlenecks, trade-offs, constraints)
-- `future_work` (Suggested directions, open research questions)
-- `insight` (Novel ideas, inspirations, or critical perspectives)
-
-Also extract references (reading list) that are central or foundational to the methodology, or directly compared against in the paper.
-Exclude casual background literature citations. If no critical references are found, return "references": [].
-
-Output JSON schema:
-{{
-  "notes": [
-    {{
-      "content": {{
-        "en": "English summary of this note.",
-        "local": "Summary in {lang_name}."
-      }},
-      "element_type": "conclusion" | "limitation" | "future_work" | "insight",
+      "element_type": "background" | "method" | "definition" | "result" | "discussion" | "conclusion" | "limitation" | "future_work" | "insight",
       "keywords": [
         {{ "en": "keyword", "local": "キーワード" }}
       ],
@@ -427,7 +367,7 @@ Output JSON schema:
 }}
 
 Paper markdown:
-{markdown_text[:60000]}
+{markdown_text[:200000]}
 """
 
 
@@ -438,7 +378,7 @@ def analyze_paper(
     force: bool = False,
     stop_after_extract: bool = False,
 ) -> dict:
-    """PDF抽出、AI分析(3ターン)、DB登録までを一気通貫で実行する"""
+    """PDF抽出、AI分析（1ターン一括）、DB登録までを一気通貫で実行する"""
     pdf_path = Path(pdf_path_str)
 
     # 論文名の決定
@@ -565,56 +505,49 @@ def analyze_paper(
                 "refs_count": 0,
             }
 
-        # 3ターンのループ
-        for turn in [1, 2, 3]:
-            if turn in state["completed_turns"]:
-                continue
-
-            state["last_step"] = f"turn_{turn}"
+        # 1ターン統合解析
+        if 1 not in state["completed_turns"]:
+            state["last_step"] = "turn_1"
             state["status"] = "processing"
             save_state(output_dir, state)
             if status_callback:
                 status_callback(
-                    f"turn_{turn}",
-                    f"AI解析ステップ {turn}/3 を実行中...",
+                    "turn_1",
+                    "AI解析（全セクション一括）を実行中...",
                     {"completed_turns": state["completed_turns"]},
                 )
 
-            prompt = get_analysis_prompt(markdown_text, turn, source_paper_info)
+            prompt = get_analysis_prompt(markdown_text, source_paper_info)
             response = generate_content_with_retry(
                 model=ANALYSIS_MODEL, contents=prompt, max_retries=2
             )
 
             if not response or not response.text:
-                raise RuntimeError(f"AIからの応答が空です (Turn {turn})")
+                raise RuntimeError("AIからの応答が空です")
 
             parsed = _extract_json(response.text)
             if not parsed:
                 raise RuntimeError(
-                    f"AIの出力をJSONとしてパースできませんでした (Turn {turn})"
+                    "AIの出力をJSONとしてパースできませんでした"
                 )
 
-            # 各ターンの結果を状態にマージ
-            if turn == 1:
-                # 論文書誌情報を更新
-                if "source_paper" in parsed:
-                    sp = parsed["source_paper"]
-                    for k in ["title", "authors", "year", "doi", "journal"]:
-                        if k in sp and sp[k]:
-                            source_paper_info[k] = sp[k]
-                if "notes" in parsed:
-                    state["partial_notes"].extend(parsed["notes"])
-            elif turn == 2:
-                if "notes" in parsed:
-                    state["partial_notes"].extend(parsed["notes"])
-            elif turn == 3:
-                if "notes" in parsed:
-                    state["partial_notes"].extend(parsed["notes"])
-                if "references" in parsed:
-                    state["partial_refs"].extend(parsed["references"])
+            # 書誌情報を更新
+            if "source_paper" in parsed:
+                sp = parsed["source_paper"]
+                for k in ["title", "authors", "year", "doi", "journal"]:
+                    if k in sp and sp[k]:
+                        source_paper_info[k] = sp[k]
 
-            state["completed_turns"].append(turn)
-            state["last_step"] = f"turn_{turn}_completed"
+            # ノートを蓄積
+            if "notes" in parsed:
+                state["partial_notes"].extend(parsed["notes"])
+
+            # 参考文献を蓄積
+            if "references" in parsed:
+                state["partial_refs"].extend(parsed["references"])
+
+            state["completed_turns"].append(1)
+            state["last_step"] = "turn_1_completed"
             save_state(output_dir, state)
 
         # 全てのAI解析が完了したらDB登録
