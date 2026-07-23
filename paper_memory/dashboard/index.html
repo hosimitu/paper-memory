@@ -32,6 +32,10 @@
                     <i data-lucide="sticky-note"></i>
                     <span data-i18n="nav.notes">知識ノート</span>
                 </a>
+                <a href="#" class="nav-item" data-view="upload">
+                    <i data-lucide="upload-cloud"></i>
+                    <span data-i18n="nav.upload">PDFアップロード</span>
+                </a>
                 <a href="#" class="nav-item" data-view="papers">
                     <i data-lucide="book-open"></i>
                     <span data-i18n="nav.papers">登録論文</span>
@@ -167,7 +171,106 @@
         </div>
     </div>
 
-    <script src="i18n.js"></script>
-    <script src="app.js?v=4"></script>
+    <!-- PDF ドラッグ&ドロップ オーバーレイ -->
+    <div id="drop-overlay" class="drop-overlay">
+        <div class="drop-overlay-content">
+            <i data-lucide="file-up" class="drop-icon"></i>
+            <p data-i18n="analysis.drop_pdf">PDFファイルをドロップして解析を開始</p>
+        </div>
+    </div>
+
+    <!-- 解析プログレスモーダル -->
+    <div id="analysis-modal" class="modal analysis-modal">
+        <div class="modal-content analysis-modal-content">
+            <header class="modal-header">
+                <span class="note-type">📄 <span data-i18n="nav.papers">登録論文</span></span>
+                <button class="modal-close analysis-modal-close"><i data-lucide="x"></i></button>
+            </header>
+            <div class="analysis-modal-body">
+                <h2 id="analysis-title" data-i18n="analysis.title">論文を解析中...</h2>
+                <div class="analysis-progress-container">
+                    <div class="analysis-steps">
+                        <div class="analysis-step" data-step="uploading">
+                            <div class="step-indicator"><i data-lucide="upload"></i></div>
+                            <span data-i18n="analysis.uploading">アップロード</span>
+                        </div>
+                        <div class="analysis-step" data-step="extracting_init">
+                            <div class="step-indicator"><i data-lucide="loader"></i></div>
+                            <span data-i18n="analysis.extracting_init">初期化</span>
+                        </div>
+                        <div class="analysis-step" data-step="extracting_convert">
+                            <div class="step-indicator"><i data-lucide="file-search"></i></div>
+                            <span data-i18n="analysis.extracting_convert">PDF解析</span>
+                        </div>
+                        <div class="analysis-step" data-step="extracting_images">
+                            <div class="step-indicator"><i data-lucide="image"></i></div>
+                            <span data-i18n="analysis.extracting_images">画像処理</span>
+                        </div>
+                        <div class="analysis-step" data-step="extracting_markdown">
+                            <div class="step-indicator"><i data-lucide="file-text"></i></div>
+                            <span data-i18n="analysis.extracting_markdown">Markdown生成</span>
+                        </div>
+                        <div class="analysis-step" data-step="turn_1">
+                            <div class="step-indicator"><i data-lucide="brain"></i></div>
+                            <span data-i18n="analysis.turn_1">AI解析 (1/3)</span>
+                        </div>
+                        <div class="analysis-step" data-step="turn_2">
+                            <div class="step-indicator"><i data-lucide="brain"></i></div>
+                            <span data-i18n="analysis.turn_2">AI解析 (2/3)</span>
+                        </div>
+                        <div class="analysis-step" data-step="turn_3">
+                            <div class="step-indicator"><i data-lucide="brain"></i></div>
+                            <span data-i18n="analysis.turn_3">AI解析 (3/3)</span>
+                        </div>
+                        <div class="analysis-step" data-step="registering">
+                            <div class="step-indicator"><i data-lucide="database"></i></div>
+                            <span data-i18n="analysis.registering">DB登録</span>
+                        </div>
+                    </div>
+                    <div class="analysis-progress-bar">
+                        <div id="analysis-progress-fill" class="analysis-progress-fill"></div>
+                    </div>
+                </div>
+                <p id="analysis-status-text" class="analysis-status-text" data-i18n="analysis.preparing">準備中...</p>
+                <div id="analysis-result" class="analysis-result" style="display:none;"></div>
+                <div id="analysis-error" class="analysis-error" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 確認ダイアログ -->
+    <div id="confirm-dialog" class="modal confirm-dialog">
+        <div class="modal-content confirm-dialog-content">
+            <header class="modal-header">
+                <span class="note-type">⚠️ <span data-i18n="analysis.confirm">確認</span></span>
+            </header>
+            <div class="confirm-dialog-body">
+                <p id="confirm-dialog-message"></p>
+                <div class="confirm-dialog-actions"></div>
+            </div>
+        </div>
+    </div>
+
+
+    <template id="tpl-upload">
+        <div class="upload-view">
+            <div id="upload-dropzone" class="upload-dropzone">
+                <i data-lucide="upload-cloud" class="upload-icon"></i>
+                <h3 data-i18n="upload.dropzone_title">PDFをここにドロップ</h3>
+                <p data-i18n="upload.dropzone_desc">またはクリックしてファイルを選択</p>
+                <input type="file" id="upload-file-input" accept="application/pdf" style="display: none;">
+            </div>
+
+            <div class="queue-section">
+                <h3 data-i18n="upload.queue_title">処理待ちキュー (Markdown抽出済み)</h3>
+                <div id="queue-list" class="queue-list">
+                    <!-- Queue items will be injected here -->
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="i18n.js?v=3"></script>
+    <script src="app.js?v=5"></script>
 </body>
 </html>

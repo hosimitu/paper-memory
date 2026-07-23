@@ -30,45 +30,77 @@ from .ai_models import QA_MODEL
 from .config import DEFAULT_LANGUAGE, QA_OUTPUT_DIR
 from .qa_formats import get_format, list_formats
 import datetime
+import email.utils
 import re
 from PIL import Image
 import base64
 
-def get_markdown_path(pdf_path_str: str, title: str = "", base_dir: str = "extracted") -> Path:
+
+def build_cache_response_headers(file_path: Path | None = None) -> dict:
+    """Markdown/テキストファイル向けのキャッシュ制御ヘッダーを構築する。"""
+    headers = {
+        "Cache-Control": "no-cache, must-revalidate",
+        "Access-Control-Allow-Origin": "*",
+    }
+
+    if file_path is None:
+        return headers
+
+    resolved_path = Path(file_path).resolve()
+    if not resolved_path.exists() or not resolved_path.is_file():
+        return headers
+
+    stat = resolved_path.stat()
+    headers["Last-Modified"] = email.utils.format_datetime(
+        datetime.datetime.fromtimestamp(stat.st_mtime, tz=datetime.timezone.utc),
+        usegmt=True,
+    )
+    with open(resolved_path, "rb") as fp:
+        headers["ETag"] = f'"{hashlib.md5(fp.read()).hexdigest()}"'
+    return headers
+
+
+def get_markdown_path(
+    pdf_path_str: str, title: str = "", base_dir: str = "extracted"
+) -> Path:
     project_root = Path(__file__).parent.parent
     extracted_dir = project_root / base_dir
-    
+
     if pdf_path_str:
         pdf_path = Path(pdf_path_str)
         stem = pdf_path.stem
-        safe_stem = stem.encode('ascii', 'ignore').decode('ascii')
+        safe_stem = stem.encode("ascii", "ignore").decode("ascii")
         if not safe_stem.strip():
             safe_stem = "paper"
-        clean_name = re.sub(r'[^a-zA-Z0-9\s_-]', '', safe_stem).strip().replace(' ', '_')
+        clean_name = (
+            re.sub(r"[^a-zA-Z0-9\s_-]", "", safe_stem).strip().replace(" ", "_")
+        )
         if len(clean_name) > 80:
-            clean_name = clean_name[:80].rstrip('_')
-        
+            clean_name = clean_name[:80].rstrip("_")
+
         exact_path = extracted_dir / clean_name / f"{clean_name}.md"
         if exact_path.exists():
             return exact_path.resolve()
 
     if title and extracted_dir.exists():
-        alphanum_title = re.sub(r'[^a-zA-Z0-9]', '', title).lower()
+        alphanum_title = re.sub(r"[^a-zA-Z0-9]", "", title).lower()
         if alphanum_title:
             search_term = alphanum_title[:30]
             for d in extracted_dir.iterdir():
                 if d.is_dir():
-                    alphanum_dir = re.sub(r'[^a-zA-Z0-9]', '', d.name).lower()
+                    alphanum_dir = re.sub(r"[^a-zA-Z0-9]", "", d.name).lower()
                     if search_term in alphanum_dir:
                         md_files = list(d.glob("*.md"))
                         if md_files:
                             return md_files[0].resolve()
-                        
+
     return None
+
 
 # レート制限管理 (RPM)
 API_USAGE_LOG = []
 API_LIMIT_RPM = 15
+
 
 def update_api_usage():
     global API_USAGE_LOG
@@ -81,7 +113,11 @@ def update_api_usage():
 
 def _flatten_link_reason(link_reason):
     if isinstance(link_reason, dict):
-        return link_reason.get("en") or link_reason.get("local") or next(iter(link_reason.values()), "")
+        return (
+            link_reason.get("en")
+            or link_reason.get("local")
+            or next(iter(link_reason.values()), "")
+        )
     if link_reason is None:
         return ""
     return str(link_reason)
@@ -93,7 +129,9 @@ def _format_qa_note_value(value):
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
-def build_qa_context_payload(search_results, query_text, search_method, link_depth, expand_paper):
+def build_qa_context_payload(
+    search_results, query_text, search_method, link_depth, expand_paper
+):
     citation_map = {}
     paper_to_citations = {}
 
@@ -121,7 +159,11 @@ def build_qa_context_payload(search_results, query_text, search_method, link_dep
         same_paper_sources = []
         paper_title = note["source_paper"].get("title", "Unknown Paper")
         if source_type == "paper_expand":
-            same_paper_sources = [cid for cid in paper_to_citations.get(paper_title, []) if cid != citation_id]
+            same_paper_sources = [
+                cid
+                for cid in paper_to_citations.get(paper_title, [])
+                if cid != citation_id
+            ]
 
         nodes.append(
             {
@@ -178,6 +220,52 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
     Paper Memory ダッシュボード用の HTTP ハンドラ
     """
 
+    def _send_cacheable_file(
+        self, file_path: Path, content_type: str = "text/plain; charset=utf-8"
+    ) -> bool:
+        """ファイルをキャッシュヘッダー付きで送信する。"""
+        if not file_path.exists() or not file_path.is_file():
+            self.send_response(404)
+            self.end_headers()
+            return False
+
+        headers = build_cache_response_headers(file_path)
+        etag = headers.get("ETag")
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header(
+                "Cache-Control",
+                headers.get("Cache-Control", "no-cache, must-revalidate"),
+            )
+            self.send_header(
+                "Access-Control-Allow-Origin",
+                headers.get("Access-Control-Allow-Origin", "*"),
+            )
+            if etag:
+                self.send_header("ETag", etag)
+            if headers.get("Last-Modified"):
+                self.send_header("Last-Modified", headers["Last-Modified"])
+            self.end_headers()
+            return True
+
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header(
+            "Cache-Control", headers.get("Cache-Control", "no-cache, must-revalidate")
+        )
+        self.send_header(
+            "Access-Control-Allow-Origin",
+            headers.get("Access-Control-Allow-Origin", "*"),
+        )
+        if etag:
+            self.send_header("ETag", etag)
+        if headers.get("Last-Modified"):
+            self.send_header("Last-Modified", headers["Last-Modified"])
+        self.end_headers()
+        with open(file_path, "rb") as fh:
+            self.wfile.write(fh.read())
+        return True
+
     def do_GET(self):
         """GET リクエストのルーティング"""
         parsed_url = urllib.parse.urlparse(self.path)
@@ -200,7 +288,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         """API リクエストの処理"""
         store = NoteStore()
         ref_store = ReferenceStore()
-        
+
         data = None
         status = 200
 
@@ -222,11 +310,27 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         note = store.get(note_id)
                         if note:
                             res_data = note.to_dict()
-                            
-                            md_path = get_markdown_path(note.source_paper.pdf_path, note.source_paper.title) if note.source_paper else None
-                            res_data["has_markdown"] = bool(md_path and md_path.exists())
-                            res_data["markdown_url"] = f"/extracted/{md_path.parent.name}/{md_path.name}" if md_path and md_path.exists() else None
-                            res_data["paper_id"] = note.source_paper.id if hasattr(note.source_paper, 'id') else None
+
+                            md_path = (
+                                get_markdown_path(
+                                    note.source_paper.pdf_path, note.source_paper.title
+                                )
+                                if note.source_paper
+                                else None
+                            )
+                            res_data["has_markdown"] = bool(
+                                md_path and md_path.exists()
+                            )
+                            res_data["markdown_url"] = (
+                                f"/extracted/{md_path.parent.name}/{md_path.name}"
+                                if md_path and md_path.exists()
+                                else None
+                            )
+                            res_data["paper_id"] = (
+                                note.source_paper.id
+                                if hasattr(note.source_paper, "id")
+                                else None
+                            )
 
                             linked_notes = []
                             for l_id in note.links:
@@ -235,26 +339,35 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                                     # リンク理由の取得
                                     link_reason = ""
                                     for h in reversed(note.evolution_history):
-                                        if h.get("action") == "link_added" and h.get("target_id") == l_id:
+                                        if (
+                                            h.get("action") == "link_added"
+                                            and h.get("target_id") == l_id
+                                        ):
                                             link_reason = h.get("reason", "")
                                             break
-                                    
+
                                     # content が dict（多言語形式）の場合にも対応
                                     if isinstance(l_note.content, dict):
                                         _content_val = {}
                                         for k, v in l_note.content.items():
                                             vs = str(v or "")
-                                            _content_val[k] = vs[:100] + ("..." if len(vs) > 100 else "")
+                                            _content_val[k] = vs[:100] + (
+                                                "..." if len(vs) > 100 else ""
+                                            )
                                     else:
                                         vs = str(l_note.content or "")
-                                        _content_val = vs[:100] + ("..." if len(vs) > 100 else "")
-                                        
-                                    linked_notes.append({
-                                        "id": l_note.id,
-                                        "content": _content_val,
-                                        "element_type": l_note.element_type,
-                                        "reason": link_reason
-                                    })
+                                        _content_val = vs[:100] + (
+                                            "..." if len(vs) > 100 else ""
+                                        )
+
+                                    linked_notes.append(
+                                        {
+                                            "id": l_note.id,
+                                            "content": _content_val,
+                                            "element_type": l_note.element_type,
+                                            "reason": link_reason,
+                                        }
+                                    )
                             res_data["linked_notes_info"] = linked_notes
                             data = res_data
                         else:
@@ -266,13 +379,18 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             # --- 論文関連 ---
             elif path == "/api/papers":
                 with store.db.get_connection() as conn:
-                    cur = conn.execute("SELECT * FROM papers ORDER BY year DESC, title ASC")
+                    # 登録順（id の昇順）で取得
+                    cur = conn.execute("SELECT * FROM papers ORDER BY id ASC")
                     papers = []
                     for r in cur.fetchall():
                         p = dict(r)
                         md_path = get_markdown_path(p.get("pdf_path"), p.get("title"))
                         p["has_markdown"] = bool(md_path and md_path.exists())
-                        p["markdown_url"] = f"/extracted/{md_path.parent.name}/{md_path.name}" if md_path and md_path.exists() else None
+                        p["markdown_url"] = (
+                            f"/extracted/{md_path.parent.name}/{md_path.name}"
+                            if md_path and md_path.exists()
+                            else None
+                        )
 
                         # サムネイル画像の検出
                         # ★ 改修点1: SVGデータを文字列として定義
@@ -286,52 +404,62 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         </svg>"""
 
                         # ★ 改修点2: SVG文字列をBase64に変換し、Data URI形式のURLを作成する
-                        encoded_svg = base64.b64encode(default_svg.encode('utf-8')).decode('utf-8')
+                        encoded_svg = base64.b64encode(
+                            default_svg.encode("utf-8")
+                        ).decode("utf-8")
                         thumbnail_url = f"data:image/svg+xml;base64,{encoded_svg}"
                         if md_path and md_path.exists():
                             images_dir = md_path.parent / "images"
                             if images_dir.exists() and images_dir.is_dir():
                                 image_files = [
-                                    f for f in images_dir.iterdir() 
-                                    if f.is_file() 
-                                    and f.name.lower().startswith('picture-')
-                                    and f.suffix.lower() in ('.png', '.jpg', '.jpeg')
+                                    f
+                                    for f in images_dir.iterdir()
+                                    if f.is_file()
+                                    and f.name.lower().startswith("picture-")
+                                    and f.suffix.lower() in (".png", ".jpg", ".jpeg")
                                 ]
-                                
+
                                 best_image = None
                                 TARGET_SIZE = 40 * 1024  # 目標サイズ（40kB）
-                                MAX_SIZE = 60 * 1024     # ★ 上限サイズ（60kB未満）
-                                MIN_SIZE = 28 * 1024     # ★ 下限サイズ（28kB以上）※あまりに小さいと表紙として不適切な可能性があるため
-                                
-                                min_size_difference = float('inf')
-                                
+                                MAX_SIZE = 60 * 1024  # ★ 上限サイズ（60kB未満）
+                                MIN_SIZE = (
+                                    28 * 1024
+                                )  # ★ 下限サイズ（28kB以上）※あまりに小さいと表紙として不適切な可能性があるため
+
+                                min_size_difference = float("inf")
+
                                 for f in image_files:
                                     try:
                                         with Image.open(f) as img:
                                             width, height = img.size
                                             aspect_ratio = height / width
-                                            
+
                                             # 条件1: 縦横比が表紙の範囲（1.2 〜 1.5）
                                             if 1.2 <= aspect_ratio <= 1.5:
-                                                
                                                 file_size = f.stat().st_size
-                                                
+
                                                 # ★ 条件2: ファイルサイズが「60kB未満」であること
                                                 if MIN_SIZE < file_size < MAX_SIZE:
-                                                    
                                                     # 40kBに一番近いものを選ぶ
-                                                    size_difference = abs(file_size - TARGET_SIZE)
-                                                    if size_difference < min_size_difference:
-                                                        min_size_difference = size_difference
+                                                    size_difference = abs(
+                                                        file_size - TARGET_SIZE
+                                                    )
+                                                    if (
+                                                        size_difference
+                                                        < min_size_difference
+                                                    ):
+                                                        min_size_difference = (
+                                                            size_difference
+                                                        )
                                                         best_image = f
                                     except Exception:
                                         continue
-                                 
+
                                 if best_image:
                                     thumbnail_url = f"/extracted/{md_path.parent.name}/images/{best_image.name}"
 
                         p["thumbnail_url"] = thumbnail_url
-                        
+
                         papers.append(p)
                     data = papers
             elif path.startswith("/api/papers/"):
@@ -341,7 +469,6 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     data = [n.to_dict() for n in store.list_by_paper_id(paper_id)]
                 else:
                     status = 404
-
 
             # --- 参考文献関連 ---
             elif path == "/api/references":
@@ -358,11 +485,11 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         threshold = float(threshold)
                     except ValueError:
                         threshold = None
-                
+
                 n = int(query.get("n", [10])[0])
                 link_depth = int(query.get("link_depth", [1])[0])
                 expand_paper = query.get("expand_paper", ["false"])[0].lower() == "true"
-                
+
                 search_data = store.search_with_graph(
                     q,
                     n_results=n,
@@ -389,17 +516,48 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 data = {
                     "notes": store.get_stats(),
                     "references": ref_store.get_stats(),
-                    "api_usage": {
-                        "used": update_api_usage(),
-                        "limit": API_LIMIT_RPM
-                    }
+                    "api_usage": {"used": update_api_usage(), "limit": API_LIMIT_RPM},
                 }
             elif path == "/api/config":
-                data = {
-                    "language": DEFAULT_LANGUAGE
-                }
+                data = {"language": DEFAULT_LANGUAGE}
             elif path == "/api/qa/formats":
                 data = list_formats()
+            elif path == "/api/queue":
+                from pathlib import Path
+                from .analyzer import load_state
+
+                project_root = Path(__file__).parent.parent
+                extracted_dir = project_root / "extracted"
+                queue_items = []
+                if extracted_dir.exists():
+                    for subdir in extracted_dir.iterdir():
+                        if subdir.is_dir():
+                            state = load_state(subdir)
+                            if state.get("status") != "completed":
+                                md_path = get_markdown_path(state.get("pdf_path"), state.get("title", subdir.name))
+                                queue_items.append(
+                                    {
+                                        "id": subdir.name,
+                                        "paper_name": subdir.name,
+                                        "pdf_path": state.get("pdf_path"),
+                                        "status": state.get("status"),
+                                        "docling_completed": state.get(
+                                            "docling_completed", False
+                                        ),
+                                        "completed_turns": state.get(
+                                            "completed_turns", []
+                                        ),
+                                        "started_at": state.get("started_at"),
+                                        "updated_at": state.get("updated_at"),
+                                        "has_markdown": bool(md_path and md_path.exists()),
+                                        "markdown_url": (
+                                            f"/extracted/{md_path.parent.name}/{md_path.name}"
+                                            if md_path and md_path.exists()
+                                            else None
+                                        ),
+                                    }
+                                )
+                data = queue_items
             else:
                 status = 404
                 data = {"error": "Endpoint not found"}
@@ -421,10 +579,10 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("ETag", etag)
-        self.send_header("Cache-Control", "no-cache") 
+        self.send_header("Cache-Control", "no-cache")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        
+
         if json_data:
             self.wfile.write(json_data)
 
@@ -432,7 +590,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         """静的ファイルの配信 (dashboard/ ディレクトリ)"""
         if path == "/" or path == "":
             path = "/index.html"
-        
+
         module_dir = Path(__file__).parent
         static_dir = module_dir / "dashboard"
         file_path = (static_dir / path.lstrip("/")).resolve()
@@ -467,26 +625,16 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        if file_path.exists() and file_path.is_file():
-            self.send_response(200)
-            # Markdownはテキストとして配信することでブラウザが別タブでテキスト表示する
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            with open(file_path, "rb") as f:
-                self.wfile.write(f.read())
-        else:
-            self.send_response(404)
-            self.end_headers()
+        self._send_cacheable_file(file_path, "text/plain; charset=utf-8")
 
     def handle_qa_outputs(self, path):
         """qa_outputs/ ディレクトリのMarkdownをプレーンテキストとして配信"""
         project_root = Path(__file__).parent.parent
         qa_out_dir = (project_root / QA_OUTPUT_DIR).resolve()
-        
+
         decoded_path = urllib.parse.unquote(path)
         # e.g. path is "/qa_outputs/file.md", remove prefix
-        rel_path = decoded_path[len(f"/{QA_OUTPUT_DIR}/"):]
+        rel_path = decoded_path[len(f"/{QA_OUTPUT_DIR}/") :]
         file_path = (qa_out_dir / rel_path).resolve()
 
         if not str(file_path).startswith(str(qa_out_dir)):
@@ -494,16 +642,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        if file_path.exists() and file_path.is_file():
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            with open(file_path, "rb") as f:
-                self.wfile.write(f.read())
-        else:
-            self.send_response(404)
-            self.end_headers()
+        self._send_cacheable_file(file_path, "text/plain; charset=utf-8")
 
     def do_POST(self):
         """POST リクエストのルーティング"""
@@ -511,9 +650,16 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         path = parsed_url.path
 
         if path.startswith("/api/"):
+            content_type = self.headers.get("Content-Type", "")
+            if "multipart/form-data" in content_type:
+                content_length = int(self.headers.get("Content-Length", 0))
+                body_bytes = self.rfile.read(content_length)
+                self.handle_multipart_upload(path, content_type, body_bytes)
+                return
+
             # リクエストボディの読み込み
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length).decode('utf-8')
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
             try:
                 post_data = json.loads(body) if body else {}
             except json.JSONDecodeError:
@@ -524,6 +670,121 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(405)
             self.end_headers()
 
+    def handle_multipart_upload(self, path, content_type, body_bytes):
+        """multipart/form-data のパースとPDF保存、状態返却"""
+        if path != "/api/upload":
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        try:
+            boundary = content_type.split("boundary=")[1].strip().encode("utf-8")
+            parts = body_bytes.split(b"--" + boundary)
+
+            file_data = None
+            filename = None
+
+            for part in parts:
+                if b"Content-Disposition" in part and b"filename=" in part:
+                    headers_part, body_part = part.split(b"\r\n\r\n", 1)
+                    if body_part.endswith(b"\r\n"):
+                        body_part = body_part[:-2]
+                    if body_part.endswith(b"--"):
+                        body_part = body_part[:-2]
+                    if body_part.endswith(b"\r\n"):
+                        body_part = body_part[:-2]
+
+                    file_data = body_part
+
+                    filename_match = re.search(
+                        r'filename="([^"]+)"',
+                        headers_part.decode("utf-8", errors="ignore"),
+                    )
+                    if filename_match:
+                        filename = filename_match.group(1)
+                    break
+
+            if not file_data or not filename:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps(
+                        {"error": "No file uploaded"}, ensure_ascii=False
+                    ).encode("utf-8")
+                )
+                return
+
+            project_root = Path(__file__).parent.parent
+            pdf_dir = project_root / "pdf"
+            pdf_dir.mkdir(parents=True, exist_ok=True)
+
+            safe_filename = Path(filename).name
+            dest_path = pdf_dir / safe_filename
+
+            with open(dest_path, "wb") as f:
+                f.write(file_data)
+
+            pdf_path_str = f"pdf/{safe_filename}"
+            stem = Path(safe_filename).stem
+            safe_stem = stem.encode("ascii", "ignore").decode("ascii")
+            if not safe_stem.strip():
+                safe_stem = "paper"
+            clean_name = (
+                re.sub(r"[^a-zA-Z0-9\s_-]", "", safe_stem).strip().replace(" ", "_")
+            )
+            if len(clean_name) > 80:
+                clean_name = clean_name[:80].rstrip("_")
+
+            extracted_dir = project_root / "extracted" / clean_name
+
+            store = NoteStore()
+            already_registered = False
+            with store.db.get_connection() as conn:
+                cur = conn.execute(
+                    "SELECT id, title FROM papers WHERE pdf_path = ? OR pdf_path = ?",
+                    (pdf_path_str, safe_filename),
+                )
+                row = cur.fetchone()
+                if row:
+                    already_registered = True
+                    paper_title = row["title"]
+                else:
+                    paper_title = stem.replace("_", " ").replace("-", " ")
+
+            from .analyzer import load_state
+
+            state = load_state(extracted_dir)
+
+            status = "new"
+            if already_registered:
+                status = "already_registered"
+            elif state.get("status") in ["processing", "error"]:
+                status = "interrupted"
+
+            data = {
+                "status": status,
+                "paper_name": paper_title,
+                "pdf_path": pdf_path_str,
+                "message": "Upload successful",
+            }
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+        except Exception as e:
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(
+                json.dumps({"error": str(e)}, ensure_ascii=False).encode("utf-8")
+            )
+
     def handle_api_post(self, path, post_data):
         """API POST リクエストの処理"""
         ref_store = ReferenceStore()
@@ -532,7 +793,103 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         status_code = 200
 
         try:
-            if path == "/api/qa":
+            if path == "/api/analyze_paper":
+                pdf_path = post_data.get("pdf_path", "")
+                resume = post_data.get("resume", False)
+                force = post_data.get("force", False)
+                stop_after_extract = post_data.get("stop_after_extract", False)
+
+                if not pdf_path:
+                    status_code = 400
+                    data = {"error": "pdf_path is required"}
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+
+                    def send_sse(event_type: str, payload: dict):
+                        try:
+                            line = f"event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                            self.wfile.write(line.encode("utf-8"))
+                            self.wfile.flush()
+                        except Exception:
+                            pass
+
+                    def status_callback(step: str, message: str, extra: dict = None):
+                        payload = {
+                            "step": step,
+                            "message": message,
+                            "pdf_path": pdf_path,
+                        }
+                        if extra:
+                            payload.update(extra)
+                        send_sse("progress", payload)
+
+                    try:
+                        from .analyzer import analyze_paper
+
+                        result = analyze_paper(
+                            pdf_path_str=pdf_path,
+                            status_callback=status_callback,
+                            resume=resume,
+                            force=force,
+                            stop_after_extract=stop_after_extract,
+                        )
+                        if stop_after_extract:
+                            send_sse(
+                                "complete",
+                                {
+                                    "status": "extracted_only",
+                                    "paper_title": result.get("paper_title", ""),
+                                    "notes_count": 0,
+                                    "refs_count": 0,
+                                },
+                            )
+                        else:
+                            send_sse(
+                                "complete",
+                                {
+                                    "paper_title": result.get("paper_title", ""),
+                                    "notes_count": result.get("notes_count", 0),
+                                    "refs_count": result.get("refs_count", 0),
+                                },
+                            )
+                    except Exception as err:
+                        send_sse(
+                            "error",
+                            {
+                                "error": str(err),
+                                "resumable": True,
+                                "pdf_path": pdf_path,
+                            },
+                        )
+                    return
+
+            elif path == "/api/delete_queue_item":
+                item_id = post_data.get("id")
+                if not item_id:
+                    status_code = 400
+                    data = {"error": "ID is required"}
+                else:
+                    import shutil
+                    from pathlib import Path
+
+                    project_root = Path(__file__).parent.parent
+                    item_dir = project_root / "extracted" / item_id
+                    if item_dir.exists() and item_dir.is_dir():
+                        try:
+                            shutil.rmtree(item_dir)
+                            data = {"status": "success"}
+                        except Exception as e:
+                            status_code = 500
+                            data = {"error": str(e)}
+                    else:
+                        status_code = 404
+                        data = {"error": "Item not found"}
+
+            elif path == "/api/qa":
                 query_text = post_data.get("query", "")
                 if not query_text:
                     status_code = 400
@@ -575,7 +932,11 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
 
                         # 2. グラフ探索付き検索を実行（各フェーズでコールバックを呼ぶ）
                         if not use_ai_rewrite:
-                            status_callback("searching", "関連ノートの検索中...", {"threshold": threshold})
+                            status_callback(
+                                "searching",
+                                "関連ノートの検索中...",
+                                {"threshold": threshold},
+                            )
                         search_data = store.search_with_graph(
                             query_text,
                             n_results=n_results,
@@ -591,11 +952,14 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
 
                         if not search_results:
                             # 関連ノートが見つからない場合
-                            send_sse("complete", {
-                                "answer": f"指定された閾値（{threshold}）では関連する知識ノートが見つかりませんでした。閾値を上げて再試行するか、質問内容を変えてみてください。",
-                                "references": [],
-                                "status": "no_context"
-                            })
+                            send_sse(
+                                "complete",
+                                {
+                                    "answer": f"指定された閾値（{threshold}）では関連する知識ノートが見つかりませんでした。閾値を上げて再試行するか、質問内容を変えてみてください。",
+                                    "references": [],
+                                    "status": "no_context",
+                                },
+                            )
                             return
 
                         # 3. プロンプト構築（リンク経由ノートの理由を注入）
@@ -606,13 +970,15 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                             note_id = note["id"]
                             ref_num = i + 1
                             source = res.get("source", "direct")
-                            references.append({
-                                "id": ref_num,
-                                "title": title,
-                                "note_id": note_id,
-                                "source": source,
-                                "depth": res.get("depth", 0),
-                            })
+                            references.append(
+                                {
+                                    "id": ref_num,
+                                    "title": title,
+                                    "note_id": note_id,
+                                    "source": source,
+                                    "depth": res.get("depth", 0),
+                                }
+                            )
 
                         qa_context = build_qa_context_payload(
                             search_results,
@@ -623,12 +989,17 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         )
 
                         from .prompts import get_qa_assistant_prompt
+
                         lang = post_data.get("lang", DEFAULT_LANGUAGE)
                         mode = post_data.get("mode", "fact")
-                        prompt = get_qa_assistant_prompt(qa_context, query_text, mode, lang)
+                        prompt = get_qa_assistant_prompt(
+                            qa_context, query_text, mode, lang
+                        )
 
                         # 4. LLM呼び出し
-                        status_callback("generating_answer", "AIによる最終回答を生成中...")
+                        status_callback(
+                            "generating_answer", "AIによる最終回答を生成中..."
+                        )
                         from .gemini_client import generate_content_with_retry
 
                         api_key = os.environ.get("GEMINI_API_KEY")
@@ -639,12 +1010,16 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         global API_USAGE_LOG
                         API_USAGE_LOG.append(datetime.datetime.now())
 
-                        response = generate_content_with_retry(model=QA_MODEL, contents=prompt, max_retries=1)
+                        response = generate_content_with_retry(
+                            model=QA_MODEL, contents=prompt, max_retries=1
+                        )
 
                         # 5. 後処理（思考プロセスのカット）
                         answer_text = response.text
                         if "===Answer Start===" in answer_text:
                             answer_text = answer_text.split("===Answer Start===")[-1].strip()
+                        elif "===Answer Start==" in answer_text:
+                            answer_text = answer_text.split("===Answer Start==")[-1].strip()
                         elif "===回答開始===" in answer_text:
                             # 互換性のため残す
                             answer_text = answer_text.split("===回答開始===")[-1].strip()
@@ -656,7 +1031,6 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                             parts = answer_text.split("Based on the provided information", 1)
                             if len(parts) > 1:
                                 answer_text = "Based on the provided information" + parts[1]
-
                         # 引用文献リストの強制カット
                         if "📚 引用文献" in answer_text:
                             answer_text = answer_text.split("📚 引用文献")[0].strip()
@@ -672,7 +1046,9 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         out_dir = project_root / QA_OUTPUT_DIR
                         out_dir.mkdir(parents=True, exist_ok=True)
 
-                        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        timestamp_str = datetime.datetime.now().strftime(
+                            "%Y%m%d_%H%M%S"
+                        )
                         md_filename = f"{timestamp_str}_{format_id}.md"
                         md_path = out_dir / md_filename
 
@@ -687,8 +1063,10 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                                 "link_depth": link_depth,
                                 "expand_paper": expand_paper,
                                 "n": n_results,
-                                "rewritten_queries": search_data.get("rewritten_queries", [])
-                            }
+                                "rewritten_queries": search_data.get(
+                                    "rewritten_queries", []
+                                ),
+                            },
                         )
 
                         with open(md_path, "w", encoding="utf-8") as f:
@@ -711,18 +1089,23 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         )
 
                         # 7. 完了イベント送信
-                        send_sse("complete", {
-                            "answer": answer_text,
-                            "references": references,
-                            "search_method": search_method,
-                            "graph_stats": graph_stats,
-                            "rewritten_queries": search_data.get("rewritten_queries", []),
-                            "output_file": output_file_url,
-                            "api_usage": {
-                                "used": update_api_usage(),
-                                "limit": API_LIMIT_RPM
-                            }
-                        })
+                        send_sse(
+                            "complete",
+                            {
+                                "answer": answer_text,
+                                "references": references,
+                                "search_method": search_method,
+                                "graph_stats": graph_stats,
+                                "rewritten_queries": search_data.get(
+                                    "rewritten_queries", []
+                                ),
+                                "output_file": output_file_url,
+                                "api_usage": {
+                                    "used": update_api_usage(),
+                                    "limit": API_LIMIT_RPM,
+                                },
+                            },
+                        )
 
                     except Exception as qa_err:
                         send_sse("error", {"error": str(qa_err)})
@@ -734,7 +1117,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     ref_id = parts[2]
                     new_status = post_data.get("status")
                     success = False
-                    
+
                     if new_status == "done":
                         linked_notes = post_data.get("linked_notes", [])
                         success = ref_store.mark_done(ref_id, linked_notes)
@@ -742,7 +1125,9 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         ref = ref_store.get(ref_id)
                         if ref:
                             ref.status = new_status
-                            ref.updated_at = __import__('datetime').datetime.now().isoformat()
+                            ref.updated_at = (
+                                __import__("datetime").datetime.now().isoformat()
+                            )
                             ref_store.add(ref)
                             success = True
                         else:
@@ -757,22 +1142,30 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     status_code = 400
                     data = {"error": "Invalid path"}
-            
+
             elif path.startswith("/api/notes/") and path.endswith("/open-markdown"):
                 parts = path.strip("/").split("/")
                 if len(parts) == 4:
                     note_id = parts[2]
                     note = store.get(note_id)
-                    if note and getattr(note, 'source_paper', None):
-                        md_path = get_markdown_path(note.source_paper.pdf_path, getattr(note.source_paper, "title", ""))
+                    if note and getattr(note, "source_paper", None):
+                        md_path = get_markdown_path(
+                            note.source_paper.pdf_path,
+                            getattr(note.source_paper, "title", ""),
+                        )
                         if md_path and md_path.exists():
                             try:
-                                if os.name == 'nt':
+                                if os.name == "nt":
                                     os.startfile(md_path)
                                 else:
                                     import subprocess
                                     import sys
-                                    opener = "open" if sys.platform == "darwin" else "xdg-open"
+
+                                    opener = (
+                                        "open"
+                                        if sys.platform == "darwin"
+                                        else "xdg-open"
+                                    )
                                     subprocess.call([opener, str(md_path)])
                                 data = {"status": "success"}
                             except Exception as e:
@@ -793,18 +1186,26 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 if len(parts) == 4:
                     paper_id = parts[2]
                     with store.db.get_connection() as conn:
-                        cur = conn.execute("SELECT pdf_path, title FROM papers WHERE id = ?", (paper_id,))
+                        cur = conn.execute(
+                            "SELECT pdf_path, title FROM papers WHERE id = ?",
+                            (paper_id,),
+                        )
                         row = cur.fetchone()
                         if row:
                             md_path = get_markdown_path(row["pdf_path"], row["title"])
                             if md_path and md_path.exists():
                                 try:
-                                    if os.name == 'nt':
+                                    if os.name == "nt":
                                         os.startfile(md_path)
                                     else:
                                         import subprocess
                                         import sys
-                                        opener = "open" if sys.platform == "darwin" else "xdg-open"
+
+                                        opener = (
+                                            "open"
+                                            if sys.platform == "darwin"
+                                            else "xdg-open"
+                                        )
                                         subprocess.call([opener, str(md_path)])
                                     data = {"status": "success"}
                                 except Exception as e:
@@ -827,7 +1228,10 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         paper_id = int(parts[2])
                         result = store.delete_paper(paper_id)
                         if result.get("deleted_paper"):
-                            data = {"status": "success", "deleted_notes": result.get("deleted_notes")}
+                            data = {
+                                "status": "success",
+                                "deleted_notes": result.get("deleted_notes"),
+                            }
                         else:
                             status_code = 404
                             data = {"error": "Paper not found"}
@@ -837,9 +1241,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     status_code = 400
                     data = {"error": "Invalid path"}
-            
-            elif path.startswith("/api/qa/history/") and path.endswith("/delete"):
 
+            elif path.startswith("/api/qa/history/") and path.endswith("/delete"):
                 parts = path.strip("/").split("/")
                 if len(parts) == 5:
                     try:
@@ -862,17 +1265,26 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
 
         except Exception as e:
             import traceback
+
             traceback.print_exc()
-            
+
             # 429 Too Many Requests の判定
             try:
                 from google.genai import errors as genai_errors
-                if isinstance(e, genai_errors.APIError) and getattr(e, "code", None) == 429:
+
+                if (
+                    isinstance(e, genai_errors.APIError)
+                    and getattr(e, "code", None) == 429
+                ):
                     status_code = 429
-                    data = {"error": "AIへのリクエスト制限（Rate Limit）に達しました。しばらく待ってから再度お試しください。"}
+                    data = {
+                        "error": "AIへのリクエスト制限（Rate Limit）に達しました。しばらく待ってから再度お試しください。"
+                    }
                 elif "429" in str(e) or "quota" in str(e).lower():
                     status_code = 429
-                    data = {"error": "AIへのリクエスト制限（Rate Limit）に達しました。しばらく待ってから再度お試しください。"}
+                    data = {
+                        "error": "AIへのリクエスト制限（Rate Limit）に達しました。しばらく待ってから再度お試しください。"
+                    }
                 else:
                     status_code = 500
                     data = {"error": f"{type(e).__name__}: {str(e)}"}
@@ -886,9 +1298,10 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
+
 def run_server(port=8080):
     """サーバーの起動"""
-    server_address = ('', port)
+    server_address = ("", port)
     httpd = http.server.HTTPServer(server_address, PaperMemoryHandler)
     print(f"🚀 Paper Memory Server started at http://localhost:{port}")
     try:

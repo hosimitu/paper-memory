@@ -11,34 +11,29 @@ A-Memの設計思想（Zettelkasten原則：原子性・リンキング・進化
 - **OS**: Windows 10/11
 - **Shell**: Windows PowerShell 5.1 / PowerShell 7+
 - **Python**: 3.10+
-- **Node.js**: 18+ (Gemini CLI用)
 
 
 ## ✨ 主な特徴とアーキテクチャ
 
-本システムは、LLM（Gemini CLI）による高度なテキスト解析と、Pythonバックエンドによる堅牢なデータ管理を組み合わせたハイブリッド・アーキテクチャを採用しています。
+本システムは、Gemini APIによる高度なテキスト解析と、Pythonバックエンドによる堅牢なデータ管理を組み合わせたアーキテクチャを採用しています。
 
 - **Zettelkasten原則**: ノートの原子性を保ち、意味的な関連性に基づいたリンク構造を自動・手動で構築します。
 - **SQLiteによる一元管理**: メタデータとリンク関係を SQLite データベースで高速かつ堅牢に管理します。
-- **Webダッシュボード**: 蓄積された知識をブラウザ上で美しく視覚化し、直感的な探索が可能です。
+- **Webダッシュボード**: 蓄積された知識をブラウザ上で美しく視覚化し、直感的な探索が可能です。PDFのアップロードと自動解析も統合されています。
 - **セマンティック検索**: Gemini Embedding (models/gemini-embedding-2) を用いた高性能なベクトル検索が可能です。
 - **DOIの自動取得・検証**: 論文解析や参考文献登録時、タイトルと著者情報をもとに Crossref / OpenAlex API を用いて正しい DOI を自動補完します。
 - **ハイブリッド解析**: `docling` をデフォルトとし、必要に応じて `pypdf` や `marker-pdf` などのバックエンドを切り替え可能な柔軟で強力なPDF解析。
 
 ```text
-[Gemini CLI (フロントエンド)]
-  - PDFの読み込み・要約
-  - 知識要素（背景, 手法, 結果等）への分割
-  - リンク生成の判断
-       ↓ シェルコマンド連携
-[Pythonヘルパー (バックエンド)]
+[Web ダッシュボード (フロントエンド)]
+  - 知識の視覚化・グラフ探索
+  - PDFのアップロードとステータス管理
+       ↓ REST API
+[Python バックエンド]
+  - Gemini API連携 (知識要素の抽出, 要約, リンク生成)
   - SQLite (paper_memory.db) による一元的なデータ管理
   - ChromaDB (.chromadb) を用いたセマンティック検索
   - DOI自動補完・自動リンク管理 (autolink)
-       ↓ API提供
-[Web ダッシュボード (閲覧用)]
-  - 知識の視覚化・グラフ探索
-  - ダーク/ライトモード対応
 ```
 
 ---
@@ -83,6 +78,7 @@ python -m paper_memory extract "pdf/paper.pdf"
 
 ### 3. 環境変数の設定 (強く推奨)
 プロジェクトルートに `.env` ファイルを作成し、Gemini APIキーを設定します。
+下記のコードを実行するか `.env.example` をリネームして用いてください。
 
 ```powershell
 # .envファイルの作成
@@ -95,20 +91,10 @@ GEMINI_API_KEY="あなたのAPIキー"
 ```
 （言語設定や出力先を変更したい場合は `paper_memory/config.py` を直接編集してください。）
 
-### 4. Gemini CLI のインストール (必須)
-論文の読み込みと解析のフロントエンドとして使用します。
-
+### 4. 動作確認
 ```powershell
-npm install -g @google/gemini-cli
-```
-
-### 5. 動作確認
-```powershell
-# バックエンドの確認
+# 統計情報の確認
 python -m paper_memory stats
-
-# フロントエンドの確認
-gemini
 ```
 
 ---
@@ -116,17 +102,13 @@ gemini
 ## 📖 使い方
 
 ### ステップ 1: 論文の解析と知識抽出
-解析したいPDFを `pdf/` フォルダに配置し、Gemini CLI経由で解析を指示します。
+Webダッシュボードを起動し、ブラウザからPDFをアップロードして解析を行います。
 
 ```powershell
 cd c:\github\paper-memory
-gemini
+python -m paper_memory serve
 ```
-プロンプトで以下を入力します：
-```text
-/paper:add pdf/your_paper_filename.pdf
-```
-*(「Analyze pdf/filename.pdf」のような自然言語での指示も可能です)*
+起動後、ブラウザで **`http://localhost:8080`** にアクセスし、UI上から対象のPDFをアップロードしてください。
 
 **裏側で実行される処理:**
 1. AIがPDFを読み込み、原子的な知識要素に分割します。
@@ -135,23 +117,24 @@ gemini
 4. 既存ノートを検索し、関連するリンクを **AIが自動生成** します。
 
 ### ステップ 2: 知識の検索と一覧
-蓄積された知識はいつでも検索・閲覧できます。
+Webダッシュボードから検索・一覧表示を行うか、バックエンドCLIを使用します。
 
-```text
+```powershell
 # セマンティック検索
-/paper:search 膜分離技術の性能評価
+python -m paper_memory search --query "膜分離技術の性能評価"
 
 # ノートの一覧表示
-/paper:list
-/paper:list method
-/paper:list "論文タイトル"
+python -m paper_memory list
+python -m paper_memory list --type method
+python -m paper_memory list --paper "論文タイトル"
 ```
 
 ### ステップ 3: 知識の進化 (Evolution)
 既存ノートのリンクを再評価したり、タグやコンテキストを最新の状態に自動更新します。
 
-```text
-/paper:evolve
+```powershell
+# AIによる自動リンク構築
+python -m paper_memory autolink --paper-title "論文タイトル"
 ```
 
 ### ステップ 4: 知識の視覚化 (Web Dashboard)
@@ -228,6 +211,14 @@ paper-memory/
 | `status`    | ステータス (unread / done) |
 
 ※ `status` が `done`（読了）になると、データは `reference_history` テーブルに移動し、アクティブなリストからは非表示になります。
+
+### データベースのリセット (初期化)
+システムに蓄積されたすべての知識（ノート、リンク、参考文献など）を完全にリセットして初期状態に戻したい場合は、以下のファイルとディレクトリを削除してください。
+
+- `paper_memory.db` (メタデータおよびリンク関係を管理するSQLiteデータベース)
+- `.chromadb/` (ベクトル検索用のインデックスを管理するChromaDBディレクトリ)
+
+**⚠️ 注意:** 片方だけを削除すると、SQLiteとChromaDB間でデータの不整合が生じ、検索時などにエラーが発生する原因となります。必ず両方を同時に削除してください。また、抽出済みのMarkdownファイルなどもやり直したい場合は `extracted/` フォルダの中身も併せて削除してください。
 
 ---
 

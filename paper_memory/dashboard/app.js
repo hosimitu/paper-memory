@@ -30,16 +30,16 @@ const TYPE_COLORS = {
 // キーワードを現在の言語に合わせて平滑化した文字列配列として取得する
 const getKeywordsList = (keywords) => {
     if (!keywords) return [];
-    
+
     // 文字列の場合はJSONパースを試みる
     if (typeof keywords === 'string') {
         try {
             keywords = JSON.parse(keywords);
-        } catch(e) {
+        } catch (e) {
             return [keywords];
         }
     }
-    
+
     // 配列の場合は各要素を文字列または翻訳オブジェクトとして解決
     if (Array.isArray(keywords)) {
         return keywords.map(kw => {
@@ -49,7 +49,7 @@ const getKeywordsList = (keywords) => {
             return kw ? String(kw) : '';
         }).filter(Boolean);
     }
-    
+
     // オブジェクトの場合は言語別配列、または多言語文字列オブジェクトとして解決
     if (typeof keywords === 'object') {
         const lang = i18n.currentLang();
@@ -67,7 +67,7 @@ const getKeywordsList = (keywords) => {
         }
         return [i18n.getTranslatedString(keywords)].filter(Boolean);
     }
-    
+
     return [String(keywords)];
 };
 
@@ -104,6 +104,9 @@ class App {
         this.currentView = 'overview';
         this.cache = {};
         this.qaHistoryOffset = 0;
+        this.paperSortMode = ['title', 'year', 'registration'].includes(localStorage.getItem('paper-sort-mode'))
+            ? localStorage.getItem('paper-sort-mode')
+            : 'registration';
         this.init();
     }
 
@@ -214,6 +217,7 @@ class App {
         const titles = {
             overview: i18n.t('nav.overview'),
             notes: i18n.t('nav.notes'),
+            upload: i18n.t('nav.upload'),
             papers: i18n.t('nav.papers'),
             references: i18n.t('nav.references'),
             search: i18n.t('nav.search'),
@@ -226,6 +230,7 @@ class App {
             switch (view) {
                 case 'overview': await this.renderOverview(); break;
                 case 'notes': await this.renderNotes(params); break;
+                case 'upload': await this.renderUpload(); break;
                 case 'papers': await this.renderPapers(); break;
                 case 'references': await this.renderReferences(); break;
                 case 'search': await this.renderSearch(params); break;
@@ -424,7 +429,7 @@ class App {
         } else {
             doiArea.innerHTML = '';
         }
-        
+
         if (note.has_markdown) {
             doiArea.innerHTML += ` <span style="margin: 0 8px;">|</span> <a href="${note.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
         }
@@ -455,7 +460,7 @@ class App {
                 const card = document.createElement('div');
                 card.className = 'note-card mini';
                 card.style.setProperty('--type-color', TYPE_COLORS[link.element_type] || '#ccc');
-                
+
                 const translatedReason = i18n.getTranslatedString(link.reason);
                 const reasonHtml = translatedReason ? `<div class="note-reason" style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; font-style:italic;">"${translatedReason}"</div>` : '';
 
@@ -480,9 +485,15 @@ class App {
 
     async renderPapers() {
         const papers = await this.fetchJson('/papers');
-        
-        // タイトルでアルファベット順にソート
-        papers.sort((a, b) => a.title.localeCompare(b.title));
+        const sortedPapers = this.paperSortMode === 'title'
+            ? [...papers].sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }))
+            : this.paperSortMode === 'year'
+                ? [...papers].sort((a, b) => {
+                    const ay = Number(a.year) || 0;
+                    const by = Number(b.year) || 0;
+                    return by - ay || (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+                })
+                : papers;
 
         // デフォルトはリスト表示
         if (!this.paperViewMode) {
@@ -490,15 +501,28 @@ class App {
         }
 
         const headerHtml = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
                 <h3 style="margin: 0;">${i18n.t('nav.papers') || '登録論文'}</h3>
-                <div class="view-toggle">
-                    <button id="btn-view-list" class="action-btn ${this.paperViewMode === 'list' ? 'active' : ''}" title="リスト表示">
-                        <i data-lucide="list"></i>
-                    </button>
-                    <button id="btn-view-grid" class="action-btn ${this.paperViewMode === 'grid' ? 'active' : ''}" title="タイル表示">
-                        <i data-lucide="layout-grid"></i>
-                    </button>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <div class="view-toggle" style="display: flex; gap: 4px;">
+                        <button id="btn-sort-registration" class="action-btn ${this.paperSortMode === 'registration' ? 'active' : ''}" title="${i18n.t('paper.sort.registration')}">
+                            ${i18n.t('paper.sort.registration')}
+                        </button>
+                        <button id="btn-sort-title" class="action-btn ${this.paperSortMode === 'title' ? 'active' : ''}" title="${i18n.t('paper.sort.title')}">
+                            ${i18n.t('paper.sort.title')}
+                        </button>
+                        <button id="btn-sort-year" class="action-btn ${this.paperSortMode === 'year' ? 'active' : ''}" title="${i18n.t('paper.sort.year')}">
+                            ${i18n.t('paper.sort.year')}
+                        </button>
+                    </div>
+                    <div class="view-toggle">
+                        <button id="btn-view-list" class="action-btn ${this.paperViewMode === 'list' ? 'active' : ''}" title="リスト表示">
+                            <i data-lucide="list"></i>
+                        </button>
+                        <button id="btn-view-grid" class="action-btn ${this.paperViewMode === 'grid' ? 'active' : ''}" title="タイル表示">
+                            <i data-lucide="layout-grid"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -506,13 +530,13 @@ class App {
         const list = document.createElement('div');
         list.className = `paper-view-container ${this.paperViewMode}-view`;
 
-        papers.forEach((paper, index) => {
+        sortedPapers.forEach((paper, index) => {
             const doiLink = paper.doi ? `<a href="https://doi.org/${paper.doi}" target="_blank" rel="noopener noreferrer" class="paper-doi-link">${paper.doi}</a>` : '-';
             let mdLink = '';
             if (paper.has_markdown && paper.id) {
                 mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
             }
-            const thumbnailHtml = paper.thumbnail_url 
+            const thumbnailHtml = paper.thumbnail_url
                 ? `<div class="paper-thumbnail"><img src="${paper.thumbnail_url}" alt="Thumbnail"></div>`
                 : `<div class="paper-thumbnail"><i data-lucide="image" style="width:32px;height:32px;opacity:0.3;"></i></div>`;
 
@@ -547,6 +571,21 @@ class App {
         };
         document.getElementById('btn-view-grid').onclick = () => {
             this.paperViewMode = 'grid';
+            this.renderPapers();
+        };
+        document.getElementById('btn-sort-registration').onclick = () => {
+            this.paperSortMode = 'registration';
+            localStorage.setItem('paper-sort-mode', this.paperSortMode);
+            this.renderPapers();
+        };
+        document.getElementById('btn-sort-title').onclick = () => {
+            this.paperSortMode = 'title';
+            localStorage.setItem('paper-sort-mode', this.paperSortMode);
+            this.renderPapers();
+        };
+        document.getElementById('btn-sort-year').onclick = () => {
+            this.paperSortMode = 'year';
+            localStorage.setItem('paper-sort-mode', this.paperSortMode);
             this.renderPapers();
         };
 
@@ -773,6 +812,143 @@ class App {
         }
 
         lucide.createIcons();
+    }
+
+    // ==========================================
+    // アップロード画面
+    // ==========================================
+    async renderUpload() {
+        const tpl = document.getElementById('tpl-upload');
+        if (!tpl) {
+            this.contentArea.innerHTML = '<div class="error-msg">テンプレートが見つかりません (tpl-upload)</div>';
+            return;
+        }
+        this.contentArea.innerHTML = '';
+        this.contentArea.appendChild(tpl.content.cloneNode(true));
+        i18n.applyTranslations(this.contentArea);
+
+        const dropzone = document.getElementById('upload-dropzone');
+        const fileInput = document.getElementById('upload-file-input');
+        const queueList = document.getElementById('queue-list');
+
+        if (dropzone && fileInput) {
+            dropzone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', async (e) => {
+                if (e.target.files.length > 0) {
+                    const h3 = dropzone.querySelector('h3');
+                    if (h3) h3.textContent = i18n.currentLang() === 'ja' ? 'アップロード中...' : 'Uploading...';
+                    await window._handlePdfUpload(e.target.files[0]);
+                    if (h3) h3.textContent = i18n.t('upload.dropzone_title');
+                    fileInput.value = '';
+                    // キュー再読み込み
+                    this.switchView('upload', {}, false);
+                }
+            });
+
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('dragover');
+            });
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('dragover');
+            });
+            dropzone.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+                if (files.length > 0) {
+                    const h3 = dropzone.querySelector('h3');
+                    if (h3) h3.textContent = i18n.currentLang() === 'ja' ? 'アップロード中...' : 'Uploading...';
+                    await window._handlePdfUpload(files[0]);
+                    if (h3) h3.textContent = i18n.t('upload.dropzone_title');
+                    this.switchView('upload', {}, false);
+                }
+            });
+        }
+
+        // キュー読み込み
+        if (queueList) {
+            try {
+                const resp = await fetch('/api/queue');
+                const items = await resp.json();
+                if (items && items.length > 0) {
+                    queueList.innerHTML = '';
+                    items.forEach(item => {
+                        const el = document.createElement('div');
+                        el.className = 'queue-item';
+
+                        // 日時データの取り出し（更新日時、なければ開始日時）
+                        const rawValue = item.updated_at || item.started_at;
+                        let dateObj;
+
+                        if (rawValue) {
+                            // 数値型（秒単位のタイムスタンプ）なら1000倍してミリ秒に、文字列型（ISO形式等）ならそのままDateオブジェクト化
+                            dateObj = typeof rawValue === 'number' ? new Date(rawValue * 1000) : new Date(rawValue);
+                        }
+
+                        // 正しく変換できた場合はローカル日時に、データが無い、または不正な場合はハイフンを表示
+                        const dt = (dateObj && !isNaN(dateObj.getTime())) ? dateObj.toLocaleString() : '-';
+
+                        const turns = (item.completed_turns || []).length;
+                        let mdLink = '';
+                        if (item.has_markdown && item.markdown_url) {
+                            mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${item.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
+                        }
+                        el.innerHTML = `
+                            <div class="queue-item-info">
+                                <div class="queue-item-title">${this._esc(item.paper_name)}</div>
+                                <div class="queue-item-meta">Status : ${this._esc(item.status)} | Completed Turn : ${turns} | Last Updated : ${dt}${mdLink}</div>
+                            </div>
+                            <div class="queue-item-actions">
+                                <button class="btn-resume" data-pdf="${this._esc(item.pdf_path)}">${i18n.t('upload.resume')}</button>
+                                <button class="btn-delete" data-id="${this._esc(item.id)}">${i18n.t('upload.delete')}</button>
+                            </div>
+                        `;
+                        queueList.appendChild(el);
+                    });
+
+                    queueList.querySelectorAll('.btn-resume').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            window._startAnalysis(btn.dataset.pdf, true, false, false);
+                        });
+                    });
+                    queueList.querySelectorAll('.btn-delete').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            const id = btn.dataset.id;
+                            const action = await window._showConfirmDialog(i18n.t('upload.delete_confirm'), [
+                                { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: 'cancel' },
+                                { label: i18n.t('upload.delete'), value: 'delete', primary: true }
+                            ]);
+                            if (action === 'delete') {
+                                await fetch('/api/delete_queue_item', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id })
+                                });
+                                this.switchView('upload', {}, false);
+                            }
+                        });
+                    });
+                } else {
+                    queueList.innerHTML = `<p style="color: var(--text-muted);">${i18n.currentLang() === 'ja' ? 'キューは空です' : 'Queue is empty'}</p>`;
+                }
+            } catch (e) {
+                console.error(e);
+                queueList.innerHTML = '<p style="color: red;">Error loading queue</p>';
+            }
+        }
+
+        lucide.createIcons();
+    }
+
+    _esc(unsafe) {
+        if (!unsafe) return '';
+        return String(unsafe)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     async renderQA(params = {}) {
@@ -1067,10 +1243,10 @@ class App {
         if (graphStats && (graphStats.linked_notes > 0 || graphStats.paper_expanded > 0)) {
             statsHtml = `<span class="graph-stats-badge">
                 ${i18n.t('search.graph_stats', {
-                    direct: graphStats.direct_hits,
-                    linked: graphStats.linked_notes,
-                    paper: graphStats.paper_expanded
-                })}
+                direct: graphStats.direct_hits,
+                linked: graphStats.linked_notes,
+                paper: graphStats.paper_expanded
+            })}
             </span>`;
         }
 
@@ -1131,11 +1307,11 @@ class App {
         // 進捗ステップの定義（将来のフェーズ追加はここに行を追加するだけ）
         const STEPS = [
             { key: 'query_rewriting', label: () => i18n.t('qa.progress.query_rewriting'), icon: '✦', visible: useAiRewrite },
-            { key: 'searching',       label: () => i18n.t('qa.progress.searching', { threshold }), icon: '⊛' },
-            { key: 'reranking',       label: () => i18n.t('qa.progress.reranking'), icon: '⊕' },
+            { key: 'searching', label: () => i18n.t('qa.progress.searching', { threshold }), icon: '⊛' },
+            { key: 'reranking', label: () => i18n.t('qa.progress.reranking'), icon: '⊕' },
             { key: 'graph_expansion', label: () => i18n.t('qa.progress.graph_expansion'), icon: '⊗', visible: linkDepth > 0 },
             { key: 'generating_answer', label: () => i18n.t('qa.progress.generating_answer'), icon: '★' },
-            { key: 'saving',          label: () => i18n.t('qa.progress.saving'), icon: '✓' },
+            { key: 'saving', label: () => i18n.t('qa.progress.saving'), icon: '✓' },
         ].filter(s => s.visible !== false);
 
         // プログレスUIを描画
@@ -1264,10 +1440,10 @@ class App {
                 if (graphStats && (graphStats.linked_notes > 0 || graphStats.paper_expanded > 0)) {
                     statsHtml = `<span class="graph-stats-badge">
                         ${i18n.t('search.graph_stats', {
-                            direct: graphStats.direct_hits,
-                            linked: graphStats.linked_notes,
-                            paper: graphStats.paper_expanded
-                        })}
+                        direct: graphStats.direct_hits,
+                        linked: graphStats.linked_notes,
+                        paper: graphStats.paper_expanded
+                    })}
                     </span>`;
                 }
                 metaArea.innerHTML = `
@@ -1384,7 +1560,299 @@ class App {
     }
 }
 
+// ========================================
+// PDF ドラッグ＆ドロップ & 自動解析
+// ========================================
+
+function initPdfDropzone(appInstance) {
+    const overlay = document.getElementById('drop-overlay');
+    const analysisModal = document.getElementById('analysis-modal');
+    const confirmDialog = document.getElementById('confirm-dialog');
+
+    if (!overlay || !analysisModal) return;
+
+    let dragCounter = 0;
+
+    // ドラッグイベント
+    document.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (e.dataTransfer.types.includes('Files')) {
+            overlay.classList.add('active');
+        }
+    });
+    document.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            overlay.classList.remove('active');
+        }
+    });
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+    document.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('active');
+
+        const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+        if (files.length === 0) return;
+
+        // 最初の1ファイルのみ処理
+        await handlePdfUpload(files[0]);
+    });
+
+    // PDFアップロード処理
+    async function handlePdfUpload(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        let uploadResult;
+        try {
+            const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+            uploadResult = await resp.json();
+            if (uploadResult.error) {
+                throw new Error(uploadResult.error);
+            }
+        } catch (err) {
+            alert(i18n.currentLang() === 'ja' ? 'アップロードに失敗しました: ' + err.message : 'Upload failed: ' + err.message);
+            return;
+        }
+
+        async function askAnalysisMode() {
+            return await showConfirmDialog(
+                i18n.currentLang() === 'ja'
+                    ? "PDFのアップロードが完了しました。次にどうしますか？"
+                    : "PDF upload complete. What would you like to do next?",
+                [
+                    { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: null },
+                    { label: i18n.t('upload.option_markdown_only'), value: 'extract' },
+                    { label: i18n.t('upload.option_full_analysis'), value: 'full', primary: true }
+                ]
+            );
+        }
+
+        if (uploadResult.status === 'already_registered') {
+            const action = await showConfirmDialog(
+                i18n.currentLang() === 'ja'
+                    ? `「${uploadResult.paper_name}」は既に登録されています。どうしますか？`
+                    : `"${uploadResult.paper_name}" is already registered. What would you like to do?`,
+                [
+                    { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: 'cancel' },
+                    { label: i18n.currentLang() === 'ja' ? '再解析して上書き' : 'Re-analyze & overwrite', value: 'force', primary: true }
+                ]
+            );
+            if (action === 'force') {
+                const mode = await askAnalysisMode();
+                if (mode) startAnalysis(uploadResult.pdf_path, false, true, mode === 'extract');
+            }
+        } else if (uploadResult.status === 'interrupted') {
+            const action = await showConfirmDialog(
+                i18n.currentLang() === 'ja'
+                    ? `「${uploadResult.paper_name}」の解析は前回中断されました。どうしますか？`
+                    : `Analysis of "${uploadResult.paper_name}" was interrupted last time. What would you like to do?`,
+                [
+                    { label: i18n.currentLang() === 'ja' ? 'キャンセル' : 'Cancel', value: 'cancel' },
+                    { label: i18n.currentLang() === 'ja' ? '最初からやり直す' : 'Start from scratch', value: 'force' },
+                    { label: i18n.currentLang() === 'ja' ? '続きから再開' : 'Resume', value: 'resume', primary: true }
+                ]
+            );
+            if (action === 'resume') {
+                startAnalysis(uploadResult.pdf_path, true, false, false);
+            } else if (action === 'force') {
+                const mode = await askAnalysisMode();
+                if (mode) startAnalysis(uploadResult.pdf_path, false, true, mode === 'extract');
+            }
+        } else {
+            // 新規
+            const mode = await askAnalysisMode();
+            if (mode) startAnalysis(uploadResult.pdf_path, false, false, mode === 'extract');
+        }
+    }
+
+    // 確認ダイアログ
+    function showConfirmDialog(message, buttons) {
+        return new Promise((resolve) => {
+            const msgEl = document.getElementById('confirm-dialog-message');
+            const actionsEl = confirmDialog.querySelector('.confirm-dialog-actions');
+            msgEl.textContent = message;
+            actionsEl.innerHTML = '';
+            buttons.forEach(btn => {
+                const el = document.createElement('button');
+                el.textContent = btn.label;
+                if (btn.primary) el.classList.add('primary');
+                el.addEventListener('click', () => {
+                    confirmDialog.classList.remove('active');
+                    resolve(btn.value);
+                });
+                actionsEl.appendChild(el);
+            });
+            confirmDialog.classList.add('active');
+        });
+    }
+
+    // 解析開始
+    function startAnalysis(pdfPath, resume, force, stopAfterExtract = false) {
+        analysisModal.classList.add('active');
+        resetAnalysisModal();
+
+        const closeBtn = analysisModal.querySelector('.analysis-modal-close');
+        closeBtn.onclick = () => {
+            analysisModal.classList.remove('active');
+            // データ更新
+            if (appInstance && typeof appInstance.switchView === 'function') {
+                appInstance.switchView(appInstance.currentView, appInstance.currentParams, false);
+            }
+        };
+
+        fetch('/api/analyze_paper', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pdf_path: pdfPath, resume, force, stop_after_extract: stopAfterExtract })
+        }).then(response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            function processChunk({ done, value }) {
+                if (done) return;
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // 不完全な最終行を保持
+
+                let currentEvent = null;
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        currentEvent = line.slice(7).trim();
+                    } else if (line.startsWith('data: ') && currentEvent) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            handleAnalysisEvent(currentEvent, data);
+                        } catch (e) { /* skip */ }
+                        currentEvent = null;
+                    } else if (line.trim() === '') {
+                        currentEvent = null;
+                    }
+                }
+
+                return reader.read().then(processChunk);
+            }
+
+            return reader.read().then(processChunk);
+        }).catch(err => {
+            showAnalysisError('Connection error: ' + err.message, false);
+        });
+    }
+
+    // SSEイベントハンドラ
+    function handleAnalysisEvent(event, data) {
+        const statusText = document.getElementById('analysis-status-text');
+        const progressFill = document.getElementById('analysis-progress-fill');
+
+        if (event === 'progress') {
+            statusText.textContent = data.message || '';
+            updateStepUI(data.step);
+
+            const stepOrder = ['uploading', 'extracting_init', 'extracting_convert', 'extracting_images', 'extracting_markdown', 'turn_1', 'turn_2', 'turn_3', 'registering'];
+            const idx = stepOrder.indexOf(data.step);
+            if (idx >= 0) {
+                const pct = Math.round(((idx + 0.5) / stepOrder.length) * 100);
+                progressFill.style.width = pct + '%';
+            }
+        } else if (event === 'complete') {
+            progressFill.style.width = '100%';
+            analysisModal.querySelectorAll('.analysis-step').forEach(s => {
+                s.classList.remove('active');
+                s.classList.add('completed');
+            });
+            if (data.status === 'extracted_only') {
+                const completionMessage = i18n.t('analysis.markdown_complete');
+                statusText.textContent = completionMessage;
+                showAnalysisResult(data, completionMessage);
+                setTimeout(() => {
+                    analysisModal.classList.remove('active');
+                    if (appInstance && appInstance.currentView === 'upload') {
+                        appInstance.switchView('upload');
+                    }
+                }, 2000);
+            } else {
+                statusText.textContent = i18n.t('analysis.complete');
+                showAnalysisResult(data);
+            }
+        } else if (event === 'error') {
+            showAnalysisError(data.error, data.resumable, data.pdf_path);
+        }
+    }
+
+    function updateStepUI(currentStep) {
+        const steps = analysisModal.querySelectorAll('.analysis-step');
+        const stepOrder = ['uploading', 'extracting_init', 'extracting_convert', 'extracting_images', 'extracting_markdown', 'turn_1', 'turn_2', 'turn_3', 'registering'];
+        const currentIdx = stepOrder.indexOf(currentStep);
+
+        steps.forEach((step, i) => {
+            step.classList.remove('active', 'completed');
+            if (i < currentIdx) step.classList.add('completed');
+            else if (i === currentIdx) step.classList.add('active');
+        });
+    }
+
+    function resetAnalysisModal() {
+        document.getElementById('analysis-status-text').textContent = i18n.t('analysis.preparing');
+        document.getElementById('analysis-progress-fill').style.width = '0%';
+        document.getElementById('analysis-result').style.display = 'none';
+        document.getElementById('analysis-error').style.display = 'none';
+        document.getElementById('analysis-title').textContent = i18n.t('analysis.title');
+        analysisModal.querySelectorAll('.analysis-step').forEach(s => {
+            s.classList.remove('active', 'completed');
+        });
+    }
+
+    function showAnalysisResult(data, completionMessage = null) {
+        const el = document.getElementById('analysis-result');
+        el.style.display = 'block';
+        const paperTitle = data.paper_title || '';
+        const message = completionMessage || i18n.t('analysis.complete');
+        const countBlock = data.status === 'extracted_only'
+            ? ''
+            : `<p>Notes: ${data.notes_count || 0} / References: ${data.refs_count || 0}</p>`;
+        el.innerHTML = `
+            <h3>✅ ${i18n.t('analysis.complete')}</h3>
+            ${paperTitle ? `<p><strong>${paperTitle}</strong></p>` : ''}
+            <p>${message}</p>
+            ${countBlock}
+        `;
+    }
+
+    function showAnalysisError(message, resumable, pdfPath) {
+        const el = document.getElementById('analysis-error');
+        el.style.display = 'block';
+        let html = `<h3>⚠️ ${i18n.t('analysis.interrupted')}</h3><p>${message}</p>`;
+        if (resumable && pdfPath) {
+            html += `<button class="resume-btn" id="btn-analysis-resume">🔄 ${i18n.currentLang() === 'ja' ? '続きから再開' : 'Resume'}</button>`;
+        }
+        el.innerHTML = html;
+
+        const btn = document.getElementById('btn-analysis-resume');
+        if (btn) {
+            btn.onclick = () => {
+                document.getElementById('analysis-error').style.display = 'none';
+                startAnalysis(pdfPath, true, false);
+            };
+        }
+    }
+
+    // renderUploadなどクラスメソッドから呼べるようにグローバル公開
+    window._handlePdfUpload = handlePdfUpload;
+    window._startAnalysis = startAnalysis;
+    window._showConfirmDialog = showConfirmDialog;
+}
+
 // Start the app
 window.addEventListener('DOMContentLoaded', () => {
     window.app = new App();
+    initPdfDropzone(window.app);
 });
+

@@ -11,34 +11,29 @@ This system is developed and tested in the following environment. Shell commands
 - **OS**: Windows 10/11
 - **Shell**: Windows PowerShell 5.1 / PowerShell 7+
 - **Python**: 3.10+
-- **Node.js**: 18+ (for Gemini CLI)
 
 
 ## ✨ Key Features and Architecture
 
-This system employs a hybrid architecture combining advanced text analysis via LLM (Gemini CLI) and robust data management with a Python backend.
+This system employs an architecture combining advanced text analysis via Gemini API and robust data management with a Python backend.
 
 - **Zettelkasten Principles**: Maintains note atomicity and builds link structures based on semantic relationships (both automated and manual).
 - **SQLite Integration**: Centralized management of metadata and link relationships using a robust SQLite database.
-- **Web Dashboard**: Beautiful browser-based visualization for intuitive knowledge exploration.
+- **Web Dashboard**: Beautiful browser-based visualization for intuitive knowledge exploration. Integrated PDF upload and automated analysis.
 - **Semantic Search**: High-performance vector search using Gemini Embeddings (`models/gemini-embedding-2`).
 - **Automatic DOI Fetching & Validation**: Automatically completes and validates DOIs using Crossref / OpenAlex APIs based on title and author metadata.
 - **Flexible PDF Parsing**: Uses `docling` as the default for fast and high-precision extraction, with alternative backends (`pypdf`, `marker-pdf`) available.
 
 ```text
-[Gemini CLI (Frontend)]
-  - PDF reading & summarization
-  - Extraction of knowledge elements (Background, Methods, Results, etc.)
-  - Link generation decision making
-       ↓ Shell command integration
-[Python Helper (Backend)]
+[Web Dashboard (Frontend)]
+  - Knowledge visualization & graph exploration
+  - PDF upload and status management
+       ↓ REST API
+[Python Backend]
+  - Gemini API Integration (Extraction of knowledge elements, summarization, link generation)
   - Centralized data management via SQLite (`paper_memory.db`)
   - Semantic search using ChromaDB (`.chromadb`)
   - DOI auto-completion & AI-driven link management (`autolink`)
-       ↓ API delivery
-[Web Dashboard (Viewer)]
-  - Knowledge visualization & graph exploration
-  - Dark/Light mode support
 ```
 
 ---
@@ -80,20 +75,10 @@ GEMINI_API_KEY="your_api_key_here"
 *(If you want to change the default language or output directories, edit `paper_memory/config.py` directly.)*
 *(You can obtain an API key for free from [Google AI Studio](https://aistudio.google.com/app/apikey))*
 
-### 3. Gemini CLI Installation (Required)
-Used as the frontend for reading and analyzing papers.
-
+### 3. Verification
 ```powershell
-npm install -g @google/gemini-cli
-```
-
-### 4. Verification
-```powershell
-# Verify backend
+# Verify statistics
 python -m paper_memory stats
-
-# Verify frontend
-gemini
 ```
 
 ---
@@ -101,17 +86,13 @@ gemini
 ## 📖 Basic Usage (Knowledge Lifecycle)
 
 ### Step 1: Paper Analysis and Knowledge Extraction
-Place the PDF you want to analyze in the `pdf/` folder and instruct Gemini CLI to analyze it.
+Start the Web Dashboard and upload the PDF from your browser to analyze it.
 
 ```powershell
 cd c:\github\paper-memory
-gemini
+python -m paper_memory serve
 ```
-Enter the following in the prompt:
-```text
-/paper:add pdf/your_paper_filename.pdf
-```
-*(You can also use natural language like "Analyze pdf/filename.pdf")*
+Once started, access **`http://localhost:8080`** in your browser and upload the target PDF from the UI.
 
 **What happens behind the scenes:**
 1. AI reads the PDF and splits it into atomic knowledge elements.
@@ -120,23 +101,24 @@ Enter the following in the prompt:
 4. AI searches existing notes and **automatically generates related links**.
 
 ### Step 2: Searching and Listing Knowledge
-You can search and browse your accumulated knowledge at any time.
+You can search and browse your accumulated knowledge from the Web Dashboard or via the backend CLI.
 
-```text
+```powershell
 # Semantic search
-/paper:search performance evaluation of membrane separation
+python -m paper_memory search --query "performance evaluation of membrane separation"
 
 # List notes
-/paper:list
-/paper:list method
-/paper:list "Paper Title"
+python -m paper_memory list
+python -m paper_memory list --type method
+python -m paper_memory list --paper "Paper Title"
 ```
 
 ### Step 3: Knowledge Evolution
 Re-evaluate links for existing notes and automatically update tags or context.
 
-```text
-/paper:evolve
+```powershell
+# AI-driven link building
+python -m paper_memory autolink --paper-title "Paper Title"
 ```
 
 ### Step 4: Visualization (Web Dashboard)
@@ -228,6 +210,14 @@ paper-memory/
 | `status`    | Status (unread / done)     |
 
 *Note: When `status` becomes `done` (read), the data is moved to the `reference_history` table.*
+
+### Database Reset (Initialization)
+If you want to completely reset all accumulated knowledge (notes, links, references, etc.) and return the system to its initial state, delete the following files and directories:
+
+- `paper_memory.db` (SQLite database managing metadata and link relationships)
+- `.chromadb/` (ChromaDB directory managing the index for vector search)
+
+**⚠️ Warning:** Deleting only one of these will cause data inconsistencies between SQLite and ChromaDB, leading to errors during searches. Always delete both simultaneously. If you also want to re-do the extraction of Markdown files, delete the contents of the `extracted/` folder as well.
 
 ---
 

@@ -119,6 +119,7 @@ def get_qa_assistant_prompt(context, query_text: str, mode: str = "fact", lang: 
 
     if mode == "insight":
         return f"""You are a research assistant tasked with helping the user solve problems by finding connections and insights across different research notes.
+This project is a knowledge extraction and organization system based on the Zettelkasten principles (atomicity, linking, evolution).
 Answer the user's query in {target_language} based on the "Provided Knowledge Notes" below.
 
 ## Output Rules (CRITICAL):
@@ -144,6 +145,7 @@ To improve polymer strength, we can consider applying the method described in [2
 """
 
     return f"""You are a research assistant.
+This project is a knowledge extraction and organization system based on the Zettelkasten principles (atomicity, linking, evolution).
 Answer the user's query in {target_language} based ONLY on the "Provided Knowledge Notes" below.
 
 ## Output Rules (CRITICAL):

@@ -6,6 +6,7 @@ const i18nDict = {
     en: {
         "nav.overview": "Overview",
         "nav.notes": "Knowledge Notes",
+        "nav.upload": "Upload PDF",
         "nav.papers": "Papers",
         "nav.references": "References",
         "nav.search": "Semantic Search",
@@ -37,6 +38,10 @@ const i18nDict = {
 
         "paper.confirm_delete": "Are you sure you want to delete this paper?\nWARNING: This will permanently delete the paper metadata, ALL its notes, ALL links to these notes, the ChromaDB index, and the extracted Markdown files.",
         "paper.delete_success": "Paper deleted successfully",
+        "paper.sort.label": "Sort",
+        "paper.sort.registration": "Registration order",
+        "paper.sort.title": "Title (A-Z)",
+        "paper.sort.year": "Publication year",
 
         "ref.unread_title": "Unread References",
         "ref.source": "Cited by",
@@ -119,11 +124,38 @@ const i18nDict = {
         "type.limitation": "Limitation",
         "type.future_work": "Future Work",
         "type.definition": "Definition",
-        "type.other": "Other"
+        "type.other": "Other",
+
+        "analysis.title": "Analyzing paper...",
+        "analysis.uploading": "Upload",
+        "analysis.extracting_init": "Initialize",
+        "analysis.extracting_convert": "PDF Analysis",
+        "analysis.extracting_images": "Image Proc.",
+        "analysis.extracting_markdown": "MD Generation",
+        "analysis.turn_1": "AI Analysis (1/3)",
+        "analysis.turn_2": "AI Analysis (2/3)",
+        "analysis.turn_3": "AI Analysis (3/3)",
+        "analysis.registering": "DB Registration",
+        "analysis.preparing": "Preparing...",
+        "analysis.complete": "Complete!",
+        "analysis.markdown_complete": "Markdown extraction complete",
+        "analysis.interrupted": "Processing was interrupted",
+        "analysis.drop_pdf": "Drop PDF file to start analysis",
+        "analysis.confirm": "Confirm",
+
+        "upload.dropzone_title": "Drop PDF here",
+        "upload.dropzone_desc": "or click to select a file",
+        "upload.queue_title": "Processing Queue (Markdown Extracted)",
+        "upload.resume": "Resume",
+        "upload.delete": "Delete",
+        "upload.delete_confirm": "Are you sure you want to delete this item? Extracted markdown will also be removed.",
+        "upload.option_markdown_only": "Extract Markdown only (add to queue)",
+        "upload.option_full_analysis": "Execute full AI analysis & Register"
     },
     ja: {
         "nav.overview": "概要",
         "nav.notes": "知識ノート",
+        "nav.upload": "PDFアップロード",
         "nav.papers": "登録論文",
         "nav.references": "参考文献",
         "nav.search": "セマンティック検索",
@@ -155,6 +187,10 @@ const i18nDict = {
 
         "paper.confirm_delete": "本当にこの論文を削除しますか？\n⚠️警告：この操作により以下のデータが完全に削除されます：\n・論文のメタデータ\n・この論文に紐づく【すべてのノート】\n・他のノートからの【すべてのリンク】\n・ChromaDBの検索インデックス\n・抽出済みのMarkdownデータ (extracted/)",
         "paper.delete_success": "論文を削除しました",
+        "paper.sort.label": "並び替え",
+        "paper.sort.registration": "登録順",
+        "paper.sort.title": "ABC順",
+        "paper.sort.year": "出版年順",
 
         "ref.unread_title": "未読参考文献",
         "ref.source": "引用元",
@@ -237,7 +273,33 @@ const i18nDict = {
         "type.limitation": "限界・課題",
         "type.future_work": "今後の展望",
         "type.definition": "定義",
-        "type.other": "その他"
+        "type.other": "その他",
+
+        "analysis.title": "論文を解析中...",
+        "analysis.uploading": "アップロード",
+        "analysis.extracting_init": "初期化",
+        "analysis.extracting_convert": "PDF解析",
+        "analysis.extracting_images": "画像処理",
+        "analysis.extracting_markdown": "Markdown生成",
+        "analysis.turn_1": "AI解析 (1/3)",
+        "analysis.turn_2": "AI解析 (2/3)",
+        "analysis.turn_3": "AI解析 (3/3)",
+        "analysis.registering": "DB登録",
+        "analysis.preparing": "準備中...",
+        "analysis.complete": "完了！",
+        "analysis.markdown_complete": "Markdown抽出が完了しました",
+        "analysis.interrupted": "処理が中断されました",
+        "analysis.drop_pdf": "PDFファイルをドロップして解析を開始",
+        "analysis.confirm": "確認",
+
+        "upload.dropzone_title": "PDFをここにドロップ",
+        "upload.dropzone_desc": "またはクリックしてファイルを選択",
+        "upload.queue_title": "処理待ちキュー (Markdown抽出済み)",
+        "upload.resume": "再開",
+        "upload.delete": "削除",
+        "upload.delete_confirm": "本当にこのアイテムを削除しますか？抽出済みのMarkdownも削除されます。",
+        "upload.option_markdown_only": "Markdown変換のみ実行 (キューに追加)",
+        "upload.option_full_analysis": "AI解析・登録まで実行"
     }
 };
 
@@ -267,7 +329,7 @@ function applyTranslations(root = document) {
         const key = el.getAttribute('data-i18n');
         el.innerText = t(key);
     });
-    
+
     root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
         el.placeholder = t(key);
@@ -297,10 +359,10 @@ function getTranslatedString(val) {
 }
 
 // Export for use in app.js
-window.i18n = { 
-    t, 
-    setLanguage, 
-    applyTranslations, 
+window.i18n = {
+    t,
+    setLanguage,
+    applyTranslations,
     currentLang: () => currentLang,
     getTranslatedString,
     loadConfig: async () => {
