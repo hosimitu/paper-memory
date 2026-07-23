@@ -70,7 +70,11 @@ def _normalize_title_key(value: str | None) -> str:
 
 
 def _candidate_keys_from_path(output_dir: Path) -> list[str]:
-    """フォルダ名と PDF/Markdown stem から比較用キー候補を生成する。"""
+    """フォルダ名と PDF/Markdown stem から比較用キー候補を生成する。
+
+    NOTE: 個別単語への分割は行わない。フォルダ名・ファイル名の完全正規化キーのみを
+    返すことで、単語1つの部分一致による誤マッチを防ぐ。
+    """
     keys = []
     raw_names = [output_dir.name]
     for md_path in output_dir.glob("*.md"):
@@ -84,16 +88,61 @@ def _candidate_keys_from_path(output_dir: Path) -> list[str]:
         norm = _normalize_title_key(name)
         if norm:
             keys.append(norm)
-        parts = re.split(r"[^a-z0-9]+", str(name).lower())
-        filtered = [p for p in parts if p]
-        if filtered:
-            keys.append("".join(filtered))
-            keys.extend(filtered)
     return list(dict.fromkeys([k for k in keys if k]))
 
 
-def _looks_like_same_paper(candidates: list[str], title_key: str, pdf_key: str) -> bool:
-    """厳格な一致条件で、対象フォルダが同一論文と見なせるかを判定する。"""
+# Jaccard類似度の閾値（この値以上で同一論文と判定する）
+_JACCARD_THRESHOLD = 0.5
+
+
+def _word_set_jaccard(text_a: str, text_b: str) -> float:
+    """2つの文字列間の単語集合Jaccard類似度を計算する。
+
+    正規化済み文字列（英小文字・数字のみ）を3文字以上のトークンに分割し、
+    その積集合 / 和集合で類似度を算出する。
+
+    Args:
+        text_a: 比較元の正規化済み文字列
+        text_b: 比較先の正規化済み文字列
+
+    Returns:
+        0.0〜1.0 の類似度スコア（単語集合が完全一致なら 1.0）
+    """
+    # 正規化前の生文字列でもトークン分割できるよう、非英数字で分割する
+    words_a = set(re.findall(r"[a-z0-9]{3,}", text_a))
+    words_b = set(re.findall(r"[a-z0-9]{3,}", text_b))
+    if not words_a or not words_b:
+        return 0.0
+    intersection = len(words_a & words_b)
+    union = len(words_a | words_b)
+    return intersection / union
+
+
+def _looks_like_same_paper(
+    candidates: list[str],
+    title_key: str,
+    pdf_key: str,
+    raw_folder_name: str = "",
+    raw_paper_title: str = "",
+    raw_pdf_path: str = "",
+) -> bool:
+    """同一論文と見なせるかを判定する。
+
+    判定基準（いずれかを満たせば True）:
+    1. 完全一致: 正規化済みキーが完全に一致する
+    2. 前方一致: candidate が title_key / pdf_key の前方部分と一致する
+       （フォルダ名がタイトルの先頭部分で切り詰められているケースに対応）
+    3. Jaccard類似度: フォルダ名・MDファイル名の単語集合と、論文タイトル・
+       PDFパスの単語集合の類似度が _JACCARD_THRESHOLD 以上
+
+    Args:
+        candidates:       フォルダ名・ファイル名から生成した正規化済みキーのリスト
+        title_key:        DB上の論文タイトルの正規化済みキー
+        pdf_key:          DB上のPDFパスの正規化済みキー
+        raw_folder_name:  Jaccard計算用の生のフォルダ名（任意）
+        raw_paper_title:  Jaccard計算用の生の論文タイトル（任意）
+        raw_pdf_path:     Jaccard計算用の生のPDFパス（任意）
+    """
     if not candidates:
         return False
     if not title_key and not pdf_key:
@@ -102,21 +151,29 @@ def _looks_like_same_paper(candidates: list[str], title_key: str, pdf_key: str) 
     for candidate in candidates:
         if not candidate:
             continue
+
+        # --- 判定1: 完全一致 ---
         if candidate == title_key or candidate == pdf_key:
             return True
-        if title_key and pdf_key:
-            if candidate in title_key and len(candidate) >= 8:
-                return True
-            if candidate in pdf_key and len(candidate) >= 8:
-                return True
-            if title_key.startswith(candidate) and len(candidate) >= 8:
-                return True
-            if title_key.endswith(candidate) and len(candidate) >= 8:
-                return True
-            if pdf_key.startswith(candidate) and len(candidate) >= 8:
-                return True
-            if pdf_key.endswith(candidate) and len(candidate) >= 8:
-                return True
+
+        # --- 判定2: 前方一致（フォルダ名がタイトルの前方部分で切れているケース）---
+        # candidate が title_key の前方にある（DB側タイトルが長い）場合に対応
+        if title_key and title_key.startswith(candidate) and len(candidate) >= 20:
+            return True
+        if pdf_key and pdf_key.startswith(candidate) and len(candidate) >= 20:
+            return True
+
+    # --- 判定3: Jaccard類似度 ---
+    # フォルダ名（または最初の候補）と DB 側タイトル・PDF パスの単語集合を比較する
+    # 生のフォルダ名が渡されていない場合は candidates の先頭を使う
+    folder_repr = (
+        raw_folder_name if raw_folder_name else (candidates[0] if candidates else "")
+    )
+    for db_repr in filter(None, [raw_paper_title, raw_pdf_path, title_key, pdf_key]):
+        score = _word_set_jaccard(folder_repr, db_repr)
+        if score >= _JACCARD_THRESHOLD:
+            return True
+
     return False
 
 
@@ -144,10 +201,18 @@ def _infer_state_from_database(
         ).fetchall()
 
         matched = None
+        raw_folder_name = output_dir.name
         for paper in papers:
             title_key = _normalize_title_key(paper["title"])
             pdf_key = _normalize_title_key(paper["pdf_path"])
-            if not _looks_like_same_paper(candidate_keys, title_key, pdf_key):
+            if not _looks_like_same_paper(
+                candidate_keys,
+                title_key,
+                pdf_key,
+                raw_folder_name=raw_folder_name,
+                raw_paper_title=paper["title"] or "",
+                raw_pdf_path=paper["pdf_path"] or "",
+            ):
                 continue
             matched = paper
             break
@@ -262,6 +327,25 @@ def load_state(output_dir: Path, project_root: Optional[Path] = None) -> dict:
         save_state(output_dir, inferred_state)
         return inferred_state
 
+    md_exists = False
+    if output_dir.exists():
+        md_exists = any(p.suffix == ".md" for p in output_dir.iterdir() if p.is_file())
+
+    if md_exists:
+        state = {
+            "status": "in_progress",
+            "docling_completed": True,
+            "completed_turns": [],
+            "partial_notes": [],
+            "partial_refs": [],
+            "error_message": None,
+            "started_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "last_step": "docling_completed",
+        }
+        save_state(output_dir, state)
+        return state
+
     return {
         "status": "new",
         "docling_completed": False,
@@ -284,9 +368,7 @@ def save_state(output_dir: Path, state: dict) -> None:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-def get_analysis_prompt(
-    markdown_text: str, source_paper_info: dict
-) -> str:
+def get_analysis_prompt(markdown_text: str, source_paper_info: dict) -> str:
     """全ての知識要素・書誌情報・参考文献を1ターンで抽出するプロンプトを構築する"""
     lang_name = get_language_name(DEFAULT_LANGUAGE)
     paper_title = source_paper_info.get("title", "Unknown Title")
@@ -496,8 +578,8 @@ def analyze_paper(
         }
 
         if stop_after_extract:
-            state["status"] = "completed"
-            state["last_step"] = "completed"
+            state["status"] = "in_progress"
+            state["last_step"] = "docling_completed"
             save_state(output_dir, state)
             return {
                 "paper_title": source_paper_info["title"],
@@ -527,9 +609,7 @@ def analyze_paper(
 
             parsed = _extract_json(response.text)
             if not parsed:
-                raise RuntimeError(
-                    "AIの出力をJSONとしてパースできませんでした"
-                )
+                raise RuntimeError("AIの出力をJSONとしてパースできませんでした")
 
             # 書誌情報を更新
             if "source_paper" in parsed:
