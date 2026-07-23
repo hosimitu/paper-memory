@@ -20,9 +20,9 @@ AI Models — プロジェクトで使用するAIモデル名の一元管理
 # PDFから抽出した表画像を LLM で解析し Markdown 表に変換するモデル
 # 高精度なマルチモーダル解析が必要なため Flash を使用
 # [使用箇所] paper_memory/extractors/docling_backend.py
-TABLE_IMAGE_MODEL = "gemini-3.1-flash-lite"
+TABLE_IMAGE_MODEL = "gemini-3.5-flash-lite"
 # 数式画像を LLM で解析し LaTeX/Markdown に変換するモデル
-FORMULA_IMAGE_MODEL = "gemini-3.1-flash-lite"
+FORMULA_IMAGE_MODEL = "gemini-3.5-flash-lite"
 
 # セマンティック検索用のベクトル（埋め込み）生成に使用するモデル
 # [使用箇所] paper_memory/store.py
@@ -30,20 +30,20 @@ EMBEDDING_MODEL = "models/gemini-embedding-2"
 
 # ダッシュボードのQA機能で回答を生成するために使用するモデル
 # [使用箇所] paper_memory/server.py
-QA_MODEL = "gemini-3.1-flash-lite"
+QA_MODEL = "gemini-3.5-flash-lite"
 
-# 検索クエリ補正に使用するモデル
+# 検索クエリ補正に使用するモデル(例：gemma-4-26b-a4b-it)
 # [使用箇所] paper_memory/store.py
-SEARCH_REWRITE_MODEL = "gemma-4-26b-a4b-it"
+SEARCH_REWRITE_MODEL = "gemini-3.5-flash-lite"
 
 # ノート間の意味的な関連性を評価し、自動リンクを構築するために使用するモデル
 # [使用箇所] paper_memory/autolinker.py
-AUTOLINK_MODEL = "gemini-3.1-flash-lite"
+AUTOLINK_MODEL = "gemini-3.5-flash-lite"
 
 # 検索結果のリランキングに使用するモデル
 # [使用箇所] paper_memory/store.py
-RERANK_MODEL = "gemini-3.1-flash-lite"
+RERANK_MODEL = "gemini-3.5-flash-lite"
 
-# 論文解析（Web UIからのAPI経由解析）で使用するモデル ("gemini-3.5-flash あたりがbest)
+# 論文解析（Web UIからのAPI経由解析）で使用するモデル (gemini-3.5-flash あたりがbest)
 # [使用箇所] paper_memory/analyzer.py
-ANALYSIS_MODEL = "gemini-3.1-flash-lite"
+ANALYSIS_MODEL = "gemini-3.5-flash"

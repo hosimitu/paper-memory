@@ -294,6 +294,7 @@ def get_analysis_prompt(
     # 共通の制約指示
     system_instruction = (
         f"You are a professional research assistant. Analyze the provided research paper markdown and extract academic knowledge notes.\n"
+        f"This project is a knowledge extraction and organization system based on the Zettelkasten principles (atomicity, linking, evolution).\n"
         f"You MUST write all multilingual fields (such as 'content', 'context', 'reason', and 'keywords') in both English ('en') and the user's preferred language, which is {lang_name} ('local').\n"
         f"Ensure all extracted notes are independent and self-contained. Include exact metrics, experimental details, and parameters with units where applicable.\n"
         f"Output ONLY a raw JSON. Do not include markdown code fences, explanations, or introductory text."
