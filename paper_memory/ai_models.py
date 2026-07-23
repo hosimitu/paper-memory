@@ -46,4 +46,4 @@ RERANK_MODEL = "gemini-3.5-flash-lite"
 
 # 論文解析（Web UIからのAPI経由解析）で使用するモデル (gemini-3.5-flash あたりがbest)
 # [使用箇所] paper_memory/analyzer.py
-ANALYSIS_MODEL = "gemini-3.5-flash"
+ANALYSIS_MODEL = "gemini-3.6-flash"
