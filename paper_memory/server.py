@@ -26,6 +26,7 @@ import hashlib
 from pathlib import Path
 from .store import NoteStore
 from .reference import ReferenceStore
+from .analyzer import clean_paper_name
 from .ai_models import QA_MODEL
 from .config import DEFAULT_LANGUAGE, QA_OUTPUT_DIR
 from .qa_formats import get_format, list_formats
@@ -69,14 +70,7 @@ def get_markdown_path(
     if pdf_path_str:
         pdf_path = Path(pdf_path_str)
         stem = pdf_path.stem
-        safe_stem = stem.encode("ascii", "ignore").decode("ascii")
-        if not safe_stem.strip():
-            safe_stem = "paper"
-        clean_name = (
-            re.sub(r"[^a-zA-Z0-9\s_-]", "", safe_stem).strip().replace(" ", "_")
-        )
-        if len(clean_name) > 80:
-            clean_name = clean_name[:80].rstrip("_")
+        clean_name = clean_paper_name(stem)
 
         exact_path = extracted_dir / clean_name / f"{clean_name}.md"
         if exact_path.exists():
@@ -728,14 +722,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
 
             pdf_path_str = f"pdf/{safe_filename}"
             stem = Path(safe_filename).stem
-            safe_stem = stem.encode("ascii", "ignore").decode("ascii")
-            if not safe_stem.strip():
-                safe_stem = "paper"
-            clean_name = (
-                re.sub(r"[^a-zA-Z0-9\s_-]", "", safe_stem).strip().replace(" ", "_")
-            )
-            if len(clean_name) > 80:
-                clean_name = clean_name[:80].rstrip("_")
+            clean_name = clean_paper_name(stem)
 
             extracted_dir = project_root / "extracted" / clean_name
 

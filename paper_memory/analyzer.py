@@ -302,6 +302,35 @@ def _infer_state_from_database(
     return inferred_state
 
 
+def _ensure_pdf_path(state: dict, output_dir: Path, project_root: Optional[Path]) -> bool:
+    """stateにpdf_pathが含まれていない場合、pdfディレクトリから推定して補完する"""
+    if state.get("pdf_path"):
+        return False
+        
+    if project_root is None:
+        project_root = Path(__file__).parent.parent
+    pdf_dir = project_root / "pdf"
+    if pdf_dir.exists():
+        for p in pdf_dir.glob("*.pdf"):
+            if clean_paper_name(p.stem) == output_dir.name:
+                state["pdf_path"] = f"pdf/{p.name}"
+                return True
+                
+            # 旧ロジック（ASCII制限）でのフォールバックマッチング
+            safe_stem_old = p.stem.encode("ascii", "ignore").decode("ascii")
+            if not safe_stem_old.strip():
+                safe_stem_old = "paper"
+            clean_name_old = re.sub(r"[^a-zA-Z0-9\s_-]", "", safe_stem_old).strip().replace(" ", "_")
+            if len(clean_name_old) > 80:
+                clean_name_old = clean_name_old[:80].rstrip("_")
+            if clean_name_old == output_dir.name:
+                state["pdf_path"] = f"pdf/{p.name}"
+                return True
+                
+    # どうしても見つからない場合は、エラー回避のために仮のパスを設定
+    state["pdf_path"] = f"pdf/{output_dir.name}.pdf"
+    return True
+
 def load_state(output_dir: Path, project_root: Optional[Path] = None) -> dict:
     """状態管理ファイルを読み込む。存在しない場合は DB/Markdown から推定する。"""
     state_path = output_dir / "analysis_state.json"
@@ -318,6 +347,10 @@ def load_state(output_dir: Path, project_root: Optional[Path] = None) -> dict:
                 loaded.setdefault("started_at", None)
                 loaded.setdefault("updated_at", None)
                 loaded.setdefault("last_step", None)
+                
+                if _ensure_pdf_path(loaded, output_dir, project_root):
+                    save_state(output_dir, loaded)
+                    
                 return loaded
         except Exception:
             pass
@@ -343,6 +376,10 @@ def load_state(output_dir: Path, project_root: Optional[Path] = None) -> dict:
             "updated_at": datetime.now().isoformat(),
             "last_step": "docling_completed",
         }
+        
+        # pdf_path の推定
+        _ensure_pdf_path(state, output_dir, project_root)
+                    
         save_state(output_dir, state)
         return state
 
@@ -453,6 +490,20 @@ Paper markdown:
 """
 
 
+def clean_paper_name(stem: str) -> str:
+    """PDFのファイル名（stem）から、保存先フォルダ/ファイル名用のクリーンな名前を生成する。"""
+    # ASCII変換を廃止し、éや各国語を残す設定に変更
+    # OSのファイルパスで禁止される記号（\ / : * ? " < > |）のみを排除します
+    safe_stem = re.sub(r"[^\w\s_-]", "", stem).strip()
+    if not safe_stem:
+        safe_stem = "paper"
+
+    # スペースをアンダースコアに統一
+    clean_name = safe_stem.replace(" ", "_")
+    if len(clean_name) > 80:
+        clean_name = clean_name[:80].rstrip("_")
+    return clean_name
+
 def analyze_paper(
     pdf_path_str: str,
     status_callback: Optional[Callable[[str, str, Optional[dict]], None]] = None,
@@ -465,17 +516,7 @@ def analyze_paper(
 
     # 論文名の決定
     stem = pdf_path.stem
-
-    # 【修正】ASCII変換を廃止し、éや各国語を残す設定に変更
-    # OSのファイルパスで禁止される記号（\ / : * ? " < > |）のみを排除します
-    safe_stem = re.sub(r"[^\w\s_-]", "", stem).strip()
-    if not safe_stem:
-        safe_stem = "paper"
-
-    # スペースをアンダースコアに統一
-    clean_name = safe_stem.replace(" ", "_")
-    if len(clean_name) > 80:
-        clean_name = clean_name[:80].rstrip("_")
+    clean_name = clean_paper_name(stem)
 
     project_root = Path(__file__).parent.parent
     output_dir = project_root / "extracted" / clean_name
