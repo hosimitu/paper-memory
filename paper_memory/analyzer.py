@@ -309,14 +309,16 @@ Extract knowledge elements of the following types:
 - `method` (Methodology, design, algorithms, materials, parameters used)
 - `definition` (Crucial technical terms or system components defined in the paper)
 
+Also, extract the accurate bibliographic information of the paper (title, authors, year, doi, journal) from the markdown text. The provided tentative title "{paper_title}" might be a filename. Please correct it to the actual title found in the text.
+
 Output JSON schema:
 {{
   "source_paper": {{
-    "title": "{paper_title}",
-    "authors": {json.dumps(source_paper_info.get("authors", []))},
-    "year": {source_paper_info.get("year") or "null"},
-    "doi": "{source_paper_info.get("doi", "")}",
-    "journal": "{source_paper_info.get("journal", "")}",
+    "title": "Exact Title Found in the Paper",
+    "authors": ["Author 1", "Author 2"],
+    "year": 2023,
+    "doi": "10.xxxx/xxxx",
+    "journal": "Journal/Conference Name",
     "pdf_path": "{source_paper_info.get("pdf_path", "")}"
   }},
   "notes": [
