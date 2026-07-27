@@ -120,7 +120,7 @@ class App {
             `;
         } else if (method === 'hybrid') {
             return `
-                <span class="method-badge hybrid" title="${i18n.t('search.method.hybrid')}">
+                <span class="method-badge hybrid" title="${i18n.t('search.method.hybrid-title')}">
                     <i data-lucide="layers"></i>
                     ${i18n.t('search.method.hybrid')}
                 </span>
@@ -1717,7 +1717,7 @@ function initPdfDropzone(appInstance) {
                 try {
                     const data = await response.json();
                     errMsg = data.error || errMsg;
-                } catch (e) {}
+                } catch (e) { }
                 throw new Error(errMsg);
             }
             const reader = response.body.getReader();
