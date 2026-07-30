@@ -1,229 +1,249 @@
-# Paper Memory — 論文知識蓄積システム
+# Paper Memory — Research Knowledge Accumulation System
 
-[English Version](README_EN.md) / 日本語版
+[日本語版 (Japanese)](README_JA.md)
 
-Zettelkasten原則 (原子性・リンキング・進化）に基づき、研究論文PDFから知識要素を抽出・蓄積・組織化するシステムです。
-GraphRAGのような特定の枠組みによるグラフ化で関連性を検索するのではなく、ノート間でそもそも関連性を記述しておき、芋づる式に情報を取得するような思想で設計しています。
+A system to extract, accumulate, and organize knowledge elements from research paper PDFs, based on the design philosophy (Zettelkasten principles: Atomicity, Linking, Evolution).
+Rather than searching for connections by generating a graph using a specific framework like GraphRAG, the system is designed based on the concept of explicitly defining relationships between notes from the outset, allowing you to retrieve information by following a chain of interconnected links.
 
-## 💻 動作環境
+## 💻 Environment
 
-本システムは以下の環境で開発・動作確認を行っています。特にシェルコマンドの構文は **PowerShell** を前提としています。
+This system is developed and tested in the following environment. Shell commands and scripts are designed for **PowerShell**.
 
 - **OS**: Windows 10/11
-- **Shell**: Windows PowerShell 5.1 / PowerShell 7+
+- **Shell**: Windows PowerShell 5.1/PowerShell 7+
 - **Python**: 3.10+
 
 
-## ✨ 主な特徴とアーキテクチャ
+## ✨ Key Features and Architecture
 
-本システムは、Gemini APIによる高度なテキスト解析と、Pythonバックエンドによる堅牢なデータ管理を組み合わせたアーキテクチャを採用しています。
+This system employs an architecture combining advanced text analysis via Gemini API and robust data management with a Python backend.
 
-- **Zettelkasten原則**: ノートの原子性を保ち、意味的な関連性に基づいたリンク構造を自動・手動で構築します。
-- **SQLiteによる一元管理**: メタデータとリンク関係を SQLite データベースで高速かつ堅牢に管理します。
-- **Webダッシュボード**: 蓄積された知識をブラウザ上で美しく視覚化し、直感的な探索が可能です。PDFのアップロードと自動解析も統合されています。
-- **セマンティック検索**: Gemini Embedding (models/gemini-embedding-2) を用いた高性能なベクトル検索が可能です。
-- **DOIの自動取得・検証**: 論文解析や参考文献登録時、タイトルと著者情報をもとに Crossref / OpenAlex API を用いて正しい DOI を自動補完します。
-- **ハイブリッド解析**: `docling` をデフォルトとし、必要に応じて `pypdf` や `marker-pdf` などのバックエンドを切り替え可能な柔軟で強力なPDF解析。
+- **Zettelkasten Principles**: Maintains note atomicity and builds link structures based on semantic relationships (both automated and manual).
+- **SQLite Integration**: Centralized management of metadata, link relationships, and vector embeddings using SQLite database (`paper_memory.db`) with `sqlite-vec`.
+- **Web Dashboard**: Beautiful browser-based visualization for intuitive knowledge exploration. Integrated PDF upload and automated analysis.
+- **Semantic Search**: High-performance vector search using Gemini Embeddings (`models/gemini-embedding-2`) powered by `sqlite-vec`.
+- **Automatic DOI Fetching & Validation**: Automatically completes and validates DOIs using Crossref/OpenAlex APIs based on title and author metadata.
+- **Flexible PDF Parsing**: Uses `docling` as the default for fast and high-precision extraction (including table image LLM analysis), with alternative backends (`pypdf`, `marker-pdf`) available.
 
 ```text
-[Web ダッシュボード (フロントエンド)]
-  - 知識の視覚化・グラフ探索
-  - PDFのアップロードとステータス管理
+[Web Dashboard (Frontend)]
+  - Knowledge visualization & graph exploration
+  - PDF upload and status management
        ↓ REST API
-[Python バックエンド]
-  - Gemini API連携 (知識要素の抽出, 要約, リンク生成)
-  - SQLite (paper_memory.db) による一元的なデータ管理
-  - ChromaDB (.chromadb) を用いたセマンティック検索
-  - DOI自動補完・自動リンク管理 (autolink)
+[Python Backend]
+  - Gemini API Integration (Extraction of knowledge elements, summarization, link generation)
+  - Centralized data management & vector search via SQLite (`paper_memory.db` with `sqlite-vec`)
+  - DOI auto-completion & AI-driven link management (`autolink`)
 ```
 
 ---
 
-## 🚀 セットアップ（万全な環境の構築）
+## 🚀 Setup
 
-本システムの全機能（高精度な検索・AIによる自動リンク生成など）をフル活用するためには、以下のステップをすべて実施して環境を構築してください。
+To fully utilize all features (high-precision search, AI-driven auto-linking, etc.), please follow these steps to set up your environment.
 
-### 1. Python環境の構築 (必須)
-バックエンド処理を担うPython環境をセットアップします。
+### 1. Python Environment Setup (Required)
+Set up the Python environment for backend processing.
 
 ```powershell
-# プロジェクトディレクトリへ移動
+# Navigate to project directory
 cd c:\github\paper-memory
 
-# 仮想環境の作成
+# Create virtual environment
 python -m venv .venv
 
-# 仮想環境の有効化 (PowerShell)
+# Activate virtual environment (PowerShell)
 .\.venv\Scripts\Activate.ps1
 
-# 依存パッケージのインストール
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. 高性能PDF解析機能の利用
-本システムは、論文の図表・スタイルを正確に抽出するために複数の解析バックエンドを提供しています。
+### 2. High-Precision PDF Extraction (Optional)
+The system supports multiple parsing backends:
 
-- **標準（推奨）**: `docling`
-  高速かつ高精度に本文や表、画像を抽出します。通常はこのバックエンドがデフォルトで使用されます。
-- **高精度**: `marker-pdf` (`--use-marker` フラグ)
-  複雑な LaTeX 数式などをテキスト化したい場合に使用します（実行に時間がかかります）。
-- **軽量**: `pypdf` (`--use-pypdf` フラグ)
-  プレーンテキストのみを高速に抽出したい場合のフォールバックです。
+- **Default (Recommended)**: `docling` — Fast and high-precision extraction for body text, tables, and figures.
+- **High-Precision**: `marker-pdf` (`--use-marker` flag) — Useful for complex LaTeX formulas (requires manual installation `pip install marker-pdf`).
+- **Lightweight**: `pypdf` (`--use-pypdf` flag) — Fast fallback for extracting plain text only.
 
 ```powershell
-# PDFをMarkdownに変換して抽出する例
+# Extract PDF to Markdown and images
 python -m paper_memory extract "pdf/paper.pdf"
 ```
 
-
-
-### 3. 環境変数の設定 (強く推奨)
-プロジェクトルートに `.env` ファイルを作成し、Gemini APIキーを設定します。
-下記のコードを実行するか `.env.example` をリネームして用いてください。
+### 3. Environment Variables (Highly Recommended)
+Create a `.env` file in the project root and set your Gemini API key.
 
 ```powershell
-# .envファイルの作成
+# Create .env file
 New-Item .env -ItemType File
 ```
 
-`.env` に以下を記述してください:
+Add the following to `.env`:
 ```env
-GEMINI_API_KEY="あなたのAPIキー"
+GEMINI_API_KEY="your_api_key_here"
 ```
-（言語設定や出力先を変更したい場合は `paper_memory/config.py` を直接編集してください。）
+*(If you want to change default settings, edit `paper_memory/config.py` directly.)*
+*(You can obtain an API key for free from [Google AI Studio](https://aistudio.google.com/app/apikey))*
 
-### 4. 動作確認
+### 4. Verification
 ```powershell
-# 統計情報の確認
+# Verify statistics
 python -m paper_memory stats
 ```
 
 ---
 
-## 📖 使い方
+## 📖 Basic Usage (Knowledge Lifecycle)
 
-### ステップ 1: 論文の解析と知識抽出
-Webダッシュボードを起動し、ブラウザからPDFをアップロードして解析を行います。
+### Step 1: Paper Analysis and Knowledge Extraction
+Start the Web Dashboard and upload the PDF from your browser to analyze it.
 
 ```powershell
 cd c:\github\paper-memory
 python -m paper_memory serve
 ```
-起動後、ブラウザで **`http://localhost:8080`** にアクセスし、UI上から対象のPDFをアップロードしてください。
+Once started, access **`http://localhost:8080`** in your browser and upload the target PDF from the UI.
 
-**裏側で実行される処理:**
-1. AIがPDFを読み込み、原子的な知識要素に分割します。
-2. バックエンドがメイン論文の **DOIを自動補完** します。
-3. ノートが SQLite データベースとベクトルインデックス（ChromaDB）に保存されます。
-4. 既存ノートを検索し、関連するリンクを **AIが自動生成** します。
+**What happens behind the scenes:**
+1. AI reads the PDF and splits it into atomic knowledge elements.
+2. The backend **automatically completes the DOI** for the main paper.
+3. Notes and vector embeddings are saved to the **SQLite database**.
+4. AI searches existing notes and **automatically generates related links**.
 
-### ステップ 2: 知識の検索と一覧
-Webダッシュボードから検索・一覧表示を行うか、バックエンドCLIを使用します。
+### Step 2: Searching and Listing Knowledge
+You can search and browse your accumulated knowledge from the Web Dashboard or via the backend CLI.
 
 ```powershell
-# セマンティック検索
-python -m paper_memory search --query "膜分離技術の性能評価"
+# Semantic search
+python -m paper_memory search --query "performance evaluation of membrane separation"
 
-# ノートの一覧表示
+# Search with threshold & link expansion
+python -m paper_memory search --query "membrane separation" --threshold 0.45 --expand-paper
+
+# List notes
 python -m paper_memory list
 python -m paper_memory list --type method
-python -m paper_memory list --paper "論文タイトル"
+python -m paper_memory list --paper "Paper Title"
 ```
 
-### ステップ 3: 知識の進化 (Evolution)
-既存ノートのリンクを再評価したり、タグやコンテキストを最新の状態に自動更新します。
+### Step 3: Knowledge Evolution
+Re-evaluate links for existing notes and automatically update tags or context.
 
 ```powershell
-# AIによる自動リンク構築
-python -m paper_memory autolink --paper-title "論文タイトル"
+# AI-driven link building
+python -m paper_memory autolink --paper-title "Paper Title"
 ```
 
-### ステップ 4: 知識の視覚化 (Web Dashboard)
-蓄積された知識をブラウザ上でグラフィカルに閲覧・探索できます。
+### Step 4: Visualization (Web Dashboard)
+Browse and explore your accumulated knowledge graphically in your browser.
 
 ```powershell
 python -m paper_memory serve
 ```
-起動後、ブラウザで **`http://localhost:8080`** にアクセスしてください。ダークモードやグラフ表示に対応しています。
+Once started, access **`http://localhost:8080`** in your browser. It supports dark mode and interactive graph visualization.
 
 ---
 
-## 🛠️ バックエンドCLI
+## 🛠️ Backend CLI (Manual Operation & Management)
+
+You can call the Python helper directly for detailed data management.
+
+### Knowledge Note Management
+```powershell
+python -m paper_memory extract "pdf/paper.pdf" [--analyze-tables] # Extract text & images from PDF
+python -m paper_memory add --file scratch/notes.json [--cleanup]   # Add notes from JSON file
+python -m paper_memory search --query "query" [--n 10] [--threshold 0.45] [--expand-paper]
+python -m paper_memory list [--paper "title"] [--type "type"]    # List notes
+python -m paper_memory get --note-id "id"                        # Get note details
+python -m paper_memory link --source "id1" --target "id2" --reason "reason" # Add manual link
+python -m paper_memory unlink --source "id1" --target "id2"     # Remove link
+python -m paper_memory neighbors --note-id "id" [--n 5]          # Find neighbor notes
+python -m paper_memory autolink --note-id "id"                  # AI-driven linking (single note)
+python -m paper_memory autolink --paper-title "title" [--yes]   # AI-driven linking (entire paper)
+python -m paper_memory serve [--port 8080]                      # Start Web Dashboard
+python -m paper_memory stats                                    # Show statistics
+python -m paper_memory scan                                     # Scan pdf/ folder
+python -m paper_memory reindex                                  # Rebuild vector search index
+python -m paper_memory delete --note-id "id"                    # Delete note
+python -m paper_memory delete-paper --paper-id 1                # Delete paper, notes & markdown
+python -m paper_memory cleanup                                  # Clean scratch/ folder
+```
+
+### Reference (Reading List) Management
+Track and manage "important papers to read next" mentioned in your analysis.
 
 ```powershell
-python -m paper_memory extract "pdf/paper.pdf"            # PDFからのテキスト抽出
-python -m paper_memory stats                              # 統計情報の表示
-python -m paper_memory list [--paper "論文名"]             # 一覧
-python -m paper_memory search --query "検索クエリ"         # 検索
-python -m paper_memory serve [--port 8080]                # ダッシュボード起動
-python -m paper_memory autolink --note-id "ノートID"      # 自動リンク構築（単一ノート）
-python -m paper_memory autolink --paper-title "論文名"    # 自動リンク構築（論文全体）
-python -m paper_memory refs                               # 未読参考文献一覧
-python -m paper_memory cleanup                            # scratch/ の掃除
+python -m paper_memory refs                              # List unread references
+python -m paper_memory refs --relevance high             # Filter by relevance
+python -m paper_memory refs --cited-by "Paper Title"     # Filter by citing paper
+python -m paper_memory refs --history                    # List completed references
+python -m paper_memory refs-add --file refs.json --cleanup # Register new references
+python -m paper_memory refs-update --ref-id "id" --status done  # Mark as read
+python -m paper_memory refs-stats                        # Show reference statistics
 ```
 
 ---
 
-## 📁 データ構造
+## 📁 Data Structure
 
+### Directory Layout
 ```text
 paper-memory/
-├── paper_memory/          # Pythonバックエンドモジュール
-│   ├── database.py        # SQLite スキーマ・接続管理
-│   ├── server.py          # REST API サーバー
-│   ├── dashboard/         # Webダッシュボード静的ファイル
+├── GEMINI.md              # Gemini CLI Context (System prompt/rules)
+├── .gemini/               # Gemini CLI command definitions
+├── paper_memory/          # Python backend modules
+│   ├── database.py        # SQLite schema, connection & sqlite-vec vector search
+│   ├── server.py          # REST API server
+│   ├── store.py           # Note Store business logic
+│   ├── dashboard/         # Web dashboard static files
 │   └── ...
-├── paper_memory.db        # メインデータベース (SQLite)
-├── .chromadb/             # ベクトル検索インデックス
-├── pdf/                   # 論文PDF
-├── extracted/             # 解析済みMarkdown・画像 (自動生成)
-├── logs/                  # 実行ログ (autolink等)
-└── scratch/               # 一時作業領域
+├── paper_memory.db        # Main Database & Vector Store (SQLite)
+├── pdf/                   # Repository for paper PDFs
+├── extracted/             # Extracted Markdown & Images (Auto-generated)
+├── logs/                  # Execution logs (autolink, etc.)
+└── scratch/               # Temporary workspace
 ```
 
+### Data Model (Note)
+| Field               | Description                                                 |
+| ------------------- | ----------------------------------------------------------- |
+| `id`                | Unique UUID                                                 |
+| `content`           | Summary text of the knowledge element                       |
+| `source_paper`      | Source paper info (Title, Authors, Year, DOI, etc.)         |
+| `element_type`      | Type of element (background, method, result, insight, etc.) |
+| `keywords`          | Keywords for search                                         |
+| `context`           | Context or prerequisites for the knowledge                  |
+| `tags`              | Classification tags                                         |
+| `links`             | IDs of related notes                                        |
+| `evolution_history` | History of updates/evolution                                |
 
-### データモデル
-各ノートは以下の構造で保存されます:
-
-| フィールド          | 説明                                                 |
-| ------------------- | ---------------------------------------------------- |
-| `id`                | 一意なUUID                                           |
-| `content`           | 知識要素の要約テキスト                               |
-| `source_paper`      | 元論文情報（タイトル, 著者, 年, DOI等）              |
-| `element_type`      | 要素の種類（background, method, result, insight 等） |
-| `keywords`          | 検索用のキーワードリスト                             |
-| `context`           | 知識が活きる文脈や前提条件                           |
-| `tags`              | 分類用タグ                                           |
-| `links`             | 他ノートとの関連付け (IDリスト)                      |
-| `evolution_history` | ノートの更新・進化の履歴                             |
-
-### 参考文献 (Reference)
-| フィールド  | 説明                       |
+### Data Model (Reference)
+| Field       | Description                |
 | ----------- | -------------------------- |
-| `id`        | 一意なUUID                 |
-| `title`     | 文献タイトル               |
-| `authors`   | 著者リスト                 |
-| `year`      | 出版年                     |
+| `id`        | Unique UUID                |
+| `title`     | Paper Title                |
+| `authors`   | List of Authors            |
+| `year`      | Publication Year           |
 | `doi`       | DOI                        |
-| `journal`   | ジャーナル / 会議名        |
-| `cited_by`  | 引用元の論文タイトル       |
-| `relevance` | 重要度 (high / medium)     |
-| `reason`    | 重要と判断された理由       |
-| `status`    | ステータス (unread / done) |
+| `journal`   | Journal / Conference Name  |
+| `cited_by`  | Title of the citing paper  |
+| `relevance` | Relevance (high / medium)  |
+| `reason`    | Reason for high relevance  |
+| `status`    | Status (unread / done)     |
 
-※ `status` が `done`（読了）になると、データは `reference_history` テーブルに移動し、アクティブなリストからは非表示になります。
+*Note: When `status` becomes `done` (read), the data is moved to the `reference_history` table.*
 
-### データベースのリセット (初期化)
-システムに蓄積されたすべての知識（ノート、リンク、参考文献など）を完全にリセットして初期状態に戻したい場合は、以下のファイルとディレクトリを削除してください。
+### Database Reset (Initialization)
+If you want to completely reset all accumulated knowledge (notes, links, references, etc.) and return the system to its initial state, delete the following file:
 
-- `paper_memory.db` (メタデータおよびリンク関係を管理するSQLiteデータベース)
-- `.chromadb/` (ベクトル検索用のインデックスを管理するChromaDBディレクトリ)
+- `paper_memory.db` (SQLite database managing metadata, link relationships, and vector index)
 
-**⚠️ 注意:** 片方だけを削除すると、SQLiteとChromaDB間でデータの不整合が生じ、検索時などにエラーが発生する原因となります。必ず両方を同時に削除してください。また、抽出済みのMarkdownファイルなどもやり直したい場合は `extracted/` フォルダの中身も併せて削除してください。
+*(Optionally, if you also want to re-do the extraction of Markdown files and images, clear the contents of the `extracted/` folder as well.)*
 
 ---
 
-## 📄 ライセンス
+## 📄 License
 
-本プロジェクトは Apache License 2.0 のもとで公開されています。詳細は [LICENSE](LICENSE) ファイルを参照してください。
-また、本プロジェクトはサードパーティ製ライブラリを使用しています。そのライセンスについては [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) を参照してください。
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+For details on third-party library licenses, please refer to [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
