@@ -1352,6 +1352,8 @@ class App {
             const reader = response.body.getReader();
             const decoder = new TextDecoder('utf-8');
             let buffer = '';
+            let currentEvent = null;
+            let currentData = null;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -1363,9 +1365,6 @@ class App {
                 const lines = buffer.split('\n');
                 buffer = lines.pop(); // 末尾の未完成行はバッファに残す
 
-                let currentEvent = null;
-                let currentData = null;
-
                 for (const line of lines) {
                     if (line.startsWith('event: ')) {
                         currentEvent = line.slice(7).trim();
@@ -1373,9 +1372,14 @@ class App {
                         currentData = line.slice(6).trim();
                     } else if (line === '' && currentEvent && currentData) {
                         // イベント完成
+                        let payload = null;
                         try {
-                            const payload = JSON.parse(currentData);
-
+                            payload = JSON.parse(currentData);
+                        } catch (parseErr) {
+                            // JSONパース失敗は無視
+                        }
+                        
+                        if (payload) {
                             if (currentEvent === 'progress') {
                                 renderProgress(payload.step);
                             } else if (currentEvent === 'complete') {
@@ -1394,8 +1398,6 @@ class App {
                             } else if (currentEvent === 'error') {
                                 throw new Error(payload.error || 'Unknown error');
                             }
-                        } catch (parseErr) {
-                            // JSONパース失敗は無視
                         }
 
                         currentEvent = null;

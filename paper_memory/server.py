@@ -517,7 +517,6 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
             elif path == "/api/qa/formats":
                 data = list_formats()
             elif path == "/api/queue":
-                from pathlib import Path
                 from .analyzer import load_state
 
                 project_root = Path(__file__).parent.parent
@@ -861,7 +860,6 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     data = {"error": "ID is required"}
                 else:
                     import shutil
-                    from pathlib import Path
 
                     project_root = Path(__file__).parent.parent
                     item_dir = project_root / "extracted" / item_id

@@ -45,10 +45,14 @@ logs/
 # --- 論文・データ・一時ファイル ---
 # 論文PDF（個別にgit addする場合のみ追跡）
 pdf/*.pdf
+pdf/*.py
+*.xlsx
+
 # 一時作業用ディレクトリ
 scratch/
 _backup/
 tests/
+
 # 生成されたユーザーデータ
 notes/*.json
 references/*.json
