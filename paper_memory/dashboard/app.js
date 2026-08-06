@@ -1781,16 +1781,22 @@ function initPdfDropzone(appInstance) {
             if (data.status === 'extracted_only') {
                 const completionMessage = i18n.t('analysis.markdown_complete');
                 statusText.textContent = completionMessage;
-                showAnalysisResult(data, completionMessage);
-                setTimeout(() => {
+                // OKボタン押下でモーダルを閉じるコールバックを渡す
+                showAnalysisResult(data, completionMessage, () => {
                     analysisModal.classList.remove('active');
                     if (appInstance && appInstance.currentView === 'upload') {
                         appInstance.switchView('upload');
                     }
-                }, 2000);
+                });
             } else {
                 statusText.textContent = i18n.t('analysis.complete');
-                showAnalysisResult(data);
+                // OKボタン押下でモーダルを閉じるコールバックを渡す
+                showAnalysisResult(data, null, () => {
+                    analysisModal.classList.remove('active');
+                    if (appInstance && appInstance.currentView === 'upload') {
+                        appInstance.switchView('upload');
+                    }
+                });
             }
         } else if (event === 'error') {
             showAnalysisError(data.error, data.resumable, data.pdf_path);
@@ -1820,20 +1826,32 @@ function initPdfDropzone(appInstance) {
         });
     }
 
-    function showAnalysisResult(data, completionMessage = null) {
+    function showAnalysisResult(data, completionMessage = null, onClose = null) {
         const el = document.getElementById('analysis-result');
         el.style.display = 'block';
         const paperTitle = data.paper_title || '';
-        const message = completionMessage || i18n.t('analysis.complete');
+        // data.status に基づいてタイトルを切り替える
+        const titleText = data.status === 'extracted_only'
+            ? `✅ ${i18n.t('analysis.markdown_complete')}`
+            : `✅ ${i18n.t('analysis.complete')}`;
         const countBlock = data.status === 'extracted_only'
             ? ''
             : `<p>Notes: ${data.notes_count || 0} / References: ${data.refs_count || 0}</p>`;
+        // onClose が渡された場合は「OK」ボタンを表示し、ユーザーが明示的に閉じるまで待機する
+        const okBtnHtml = onClose
+            ? `<button class="ok-btn" id="btn-analysis-ok">✔ OK</button>`
+            : '';
         el.innerHTML = `
-            <h3>✅ ${i18n.t('analysis.complete')}</h3>
+            <h3>${titleText}</h3>
             ${paperTitle ? `<p><strong>${paperTitle}</strong></p>` : ''}
-            <p>${message}</p>
             ${countBlock}
+            ${okBtnHtml}
         `;
+        // OKボタンにコールバックを登録
+        if (onClose) {
+            const btn = document.getElementById('btn-analysis-ok');
+            if (btn) btn.onclick = onClose;
+        }
     }
 
     function showAnalysisError(message, resumable, pdfPath) {

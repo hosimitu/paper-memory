@@ -1690,6 +1690,26 @@ body {
     filter: brightness(1.1);
 }
 
+/* Markdown完了時OKボタン */
+.analysis-result .ok-btn {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 8px 32px;
+    background: #22c55e;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.analysis-result .ok-btn:hover {
+    background: #16a34a;
+    transform: translateY(-1px);
+}
+
 /* 確認ダイアログ */
 .confirm-dialog .confirm-dialog-content {
     max-width: 440px;
