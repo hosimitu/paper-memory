@@ -240,6 +240,18 @@ class Database:
             )
             """)
 
+            # papers テーブルへの解析メタデータカラム追加 (Migration)
+            cursor_papers = conn.execute("PRAGMA table_info(papers)")
+            papers_columns = [col["name"] for col in cursor_papers.fetchall()]
+            if "analysis_model" not in papers_columns:
+                conn.execute("ALTER TABLE papers ADD COLUMN analysis_model TEXT")
+            if "autolink_model" not in papers_columns:
+                conn.execute("ALTER TABLE papers ADD COLUMN autolink_model TEXT")
+            if "analyzed_at" not in papers_columns:
+                conn.execute("ALTER TABLE papers ADD COLUMN analyzed_at TEXT")
+            if "analysis_meta" not in papers_columns:
+                conn.execute("ALTER TABLE papers ADD COLUMN analysis_meta TEXT")
+
             # 既存のテーブルにカラムがない場合は追加 (Migration)
             cursor = conn.execute("PRAGMA table_info(qa_history)")
             columns = [column['name'] for column in cursor.fetchall()]

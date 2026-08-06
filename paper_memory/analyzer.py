@@ -747,6 +747,22 @@ def analyze_paper(
         except Exception as e:
             print(f"[WARNING] 自動リンク生成に失敗しました: {e}", file=sys.stderr)
 
+        # 解析に使用したモデル情報をDBへ記録
+        try:
+            from .ai_models import AUTOLINK_MODEL as _AUTOLINK_MODEL
+            paper_title = source_paper_info.get("title", "")
+            if paper_title:
+                store.update_paper_analysis_meta(
+                    paper_title=paper_title,
+                    analysis_model=ANALYSIS_MODEL,
+                    autolink_model=_AUTOLINK_MODEL,
+                    extra_meta={
+                        "extraction_backend": "docling",
+                    },
+                )
+        except Exception as e:
+            print(f"[WARNING] 解析メタデータの保存に失敗しました: {e}", file=sys.stderr)
+
         return {
             "status": "success",
             "paper_title": source_paper_info["title"],
