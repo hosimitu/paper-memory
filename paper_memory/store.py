@@ -437,6 +437,152 @@ class NoteStore:
         
         return {"deleted_notes": len(note_ids), "deleted_paper": True}
 
+    def update_paper_analysis_meta(
+        self,
+        paper_title: str,
+        analysis_model: str,
+        autolink_model: str,
+        analyzed_at: Optional[str] = None,
+        extra_meta: Optional[dict] = None,
+    ) -> bool:
+        """論文の解析メタデータ（使用AIモデル・解析日時）をDBに保存する。
+
+        Args:
+            paper_title: 論文タイトル（papersテーブルの主キー）
+            analysis_model: 解析に使用したANALYSIS_MODELの値
+            autolink_model: 自動リンクに使用したAUTOLINK_MODELの値
+            analyzed_at: 解析完了時刻（ISO8601。省略時は現在時刻）
+            extra_meta: 追加情報（抽出バックエンド等）をJSON辞書で渡す
+
+        Returns:
+            更新が成功した場合 True、該当論文が見つからない場合 False
+        """
+        if analyzed_at is None:
+            from datetime import datetime
+            analyzed_at = datetime.now().isoformat()
+
+        meta_json = json.dumps(extra_meta, ensure_ascii=False) if extra_meta else None
+
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE papers
+                SET analysis_model = ?,
+                    autolink_model = ?,
+                    analyzed_at    = ?,
+                    analysis_meta  = ?
+                WHERE title = ?
+                """,
+                (analysis_model, autolink_model, analyzed_at, meta_json, paper_title),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def get_paper_analysis_meta(self, paper_title: str) -> Optional[Dict[str, Any]]:
+        """論文の解析メタデータを取得する。
+
+        Args:
+            paper_title: 論文タイトル
+
+        Returns:
+            {
+                "paper_title": str,
+                "analysis_model": str | None,
+                "autolink_model": str | None,
+                "analyzed_at": str | None,
+                "analysis_meta": dict | None,
+            }
+            該当論文が見つからない場合は None
+        """
+        with self.db.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT title, analysis_model, autolink_model, analyzed_at, analysis_meta
+                FROM papers
+                WHERE title = ?
+                """,
+                (paper_title,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        meta = None
+        if row["analysis_meta"]:
+            try:
+                meta = json.loads(row["analysis_meta"])
+            except json.JSONDecodeError:
+                meta = None
+
+        return {
+            "paper_title": row["title"],
+            "analysis_model": row["analysis_model"],
+            "autolink_model": row["autolink_model"],
+            "analyzed_at": row["analyzed_at"],
+            "analysis_meta": meta,
+        }
+
+    def list_stale_papers(
+        self,
+        current_analysis_model: str,
+        current_autolink_model: str,
+    ) -> List[Dict[str, Any]]:
+        """現在のモデル設定と異なるモデルで解析された論文の一覧を返す。
+
+        対象:
+        - 解析メタが未保存（analysis_model が NULL）
+        - ANALYSIS_MODEL が現在値と異なる
+        - AUTOLINK_MODEL が現在値と異なる
+
+        Returns:
+            [
+                {
+                    "paper_id": int,
+                    "paper_title": str,
+                    "saved_analysis_model": str | None,
+                    "current_analysis_model": str,
+                    "saved_autolink_model": str | None,
+                    "current_autolink_model": str,
+                    "analyzed_at": str | None,
+                    "analysis_model_stale": bool,
+                    "autolink_model_stale": bool,
+                }
+            ]
+        """
+        with self.db.get_connection() as conn:
+            # ノートが1件以上ある論文のみ対象（解析済みの論文だけを確認）
+            rows = conn.execute(
+                """
+                SELECT p.id, p.title, p.analysis_model, p.autolink_model, p.analyzed_at
+                FROM papers p
+                WHERE EXISTS (SELECT 1 FROM notes n WHERE n.paper_id = p.id)
+                  AND (
+                    p.analysis_model IS NULL
+                    OR p.analysis_model != ?
+                    OR p.autolink_model IS NULL
+                    OR p.autolink_model != ?
+                  )
+                ORDER BY p.analyzed_at ASC NULLS FIRST, p.title ASC
+                """,
+                (current_analysis_model, current_autolink_model),
+            ).fetchall()
+
+        result = []
+        for row in rows:
+            result.append({
+                "paper_id": row["id"],
+                "paper_title": row["title"],
+                "saved_analysis_model": row["analysis_model"],
+                "current_analysis_model": current_analysis_model,
+                "saved_autolink_model": row["autolink_model"],
+                "current_autolink_model": current_autolink_model,
+                "analyzed_at": row["analyzed_at"],
+                "analysis_model_stale": row["analysis_model"] != current_analysis_model,
+                "autolink_model_stale": row["autolink_model"] != current_autolink_model,
+            })
+        return result
+
     def list_all(self) -> list[PaperNote]:
         """全ノートを返す"""
         with self.db.get_connection() as conn:

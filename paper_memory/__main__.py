@@ -173,6 +173,9 @@ def create_parser() -> argparse.ArgumentParser:
     # --- refs-stats コマンド ---
     subparsers.add_parser("refs-stats", help="参考文献の統計情報")
 
+    # --- stale コマンド ---
+    subparsers.add_parser("stale", help="古いAIモデルで解析された論文の一覧をJSON出力")
+
     # --- cleanup コマンド ---
     subparsers.add_parser("cleanup", help="scratch フォルダの中身を削除")
 
@@ -628,6 +631,24 @@ def cmd_stats(args, store: NoteStore) -> None:
     })
 
 
+def cmd_stale(args, store: NoteStore) -> None:
+    """古いAIモデルで解析された論文を一覧表示するコマンド"""
+    from .ai_models import ANALYSIS_MODEL, AUTOLINK_MODEL
+    stale_papers = store.list_stale_papers(
+        current_analysis_model=ANALYSIS_MODEL,
+        current_autolink_model=AUTOLINK_MODEL,
+    )
+    output_json({
+        "status": "success",
+        "current_models": {
+            "analysis_model": ANALYSIS_MODEL,
+            "autolink_model": AUTOLINK_MODEL,
+        },
+        "stale_count": len(stale_papers),
+        "stale_papers": stale_papers,
+    })
+
+
 def cmd_cleanup(args, store: NoteStore) -> None:
     """scratch フォルダを空にする"""
     import shutil
@@ -1013,6 +1034,7 @@ def main() -> None:
         "neighbors": cmd_neighbors,
         "scan": cmd_scan,
         "stats": cmd_stats,
+        "stale": cmd_stale,
         "reindex": cmd_reindex,
         "migrate": cmd_migrate,
         "serve": cmd_serve,
