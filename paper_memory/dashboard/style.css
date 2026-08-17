@@ -1882,3 +1882,143 @@ body {
 .dark-mode .btn-delete:hover {
     background-color: rgba(239, 68, 68, 0.1);
 }
+
+/* ==========================================
+   DOI Conflict Resolution Card & Choices
+   ========================================== */
+.doi-conflict-card {
+    margin: 20px 0 12px 0;
+    padding: 16px 18px;
+    background: var(--bg-secondary, #ffffff);
+    border: 2px solid #f59e0b;
+    border-radius: 12px;
+    text-align: left;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.doi-conflict-header {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #d97706;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+body.light-mode .doi-conflict-header {
+    color: #b45309;
+}
+
+.doi-conflict-desc {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    margin: 0 0 14px 0;
+    line-height: 1.5;
+}
+
+.doi-choices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.doi-choice-item {
+    display: flex;
+    align-items: stretch;
+    background: var(--bg-primary);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.doi-choice-item:hover {
+    border-color: var(--accent);
+}
+
+.doi-choice-item.selected {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.12);
+}
+
+body.light-mode .doi-choice-item.selected {
+    border-color: var(--accent);
+    background: rgba(2, 132, 199, 0.1);
+}
+
+.btn-doi-select {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-primary);
+}
+
+.doi-choice-title {
+    font-size: 0.84rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-primary);
+}
+
+.doi-choice-item.selected .doi-choice-title {
+    color: var(--accent);
+}
+
+.doi-radio {
+    font-size: 0.9rem;
+}
+
+.doi-code-text {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.doi-choice-item.selected .doi-code-text {
+    color: var(--accent);
+}
+
+.doi-external-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    background: rgba(0, 0, 0, 0.05);
+    border-left: 1px solid var(--border);
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    gap: 6px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+body.light-mode .doi-external-link {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.doi-external-link:hover {
+    background: var(--accent);
+    color: #ffffff !important;
+}
+
+.doi-update-status {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-top: 10px;
+    color: #10b981;
+    display: none;
+}
