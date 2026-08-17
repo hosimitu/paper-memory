@@ -38,8 +38,18 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Callable
 
 from .extractors.base import ExtractionResult, ExtractorBackend
+
+
+def is_marker_available() -> bool:
+    """marker-pdfがインストールされているか確認する"""
+    try:
+        from .extractors.marker_backend import is_marker_available as _check
+        return _check()
+    except Exception:
+        return False
 
 
 def extract(
@@ -56,7 +66,7 @@ def extract(
 
     Args:
         pdf_path:       入力 PDF ファイルのパス
-        backend:        使用するバックエンド ("docling" / "pypdf" / "marker")
+        backend:        使用するバックエンド ("auto" / "docling" / "pypdf" / "marker")
         analyze_tables: True の場合、docling バックエンドで表画像を LLM 解析する
         light_mode:     marker バックエンド使用時に CPU のみ・OCR なしで実行
         base_dir:       出力先のベースディレクトリ（デフォルト: "extracted"）
@@ -73,6 +83,36 @@ def extract(
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF ファイルが見つかりません: {pdf_path}")
+
+    if backend == "auto":
+        # まず docling を試し、markerが利用可能な場合は失敗時に marker に自動フォールバック
+        try:
+            if progress_callback:
+                progress_callback(0.0, "PDF解析を開始中 (autoモード: Doclingを使用)...")
+            return extract(
+                pdf_path,
+                backend="docling",
+                analyze_tables=analyze_tables,
+                light_mode=light_mode,
+                base_dir=base_dir,
+                progress_callback=progress_callback,
+                **options,
+            )
+        except Exception as e:
+            if is_marker_available():
+                if progress_callback:
+                    progress_callback(0.0, f"Doclingでの解析に失敗したため、Markerにフォールバックします... ({e})")
+                return extract(
+                    pdf_path,
+                    backend="marker",
+                    analyze_tables=analyze_tables,
+                    light_mode=light_mode,
+                    base_dir=base_dir,
+                    progress_callback=progress_callback,
+                    **options,
+                )
+            else:
+                raise e
 
     # バックエンドの選択
     extractor = _get_backend(backend)

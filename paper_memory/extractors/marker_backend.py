@@ -28,7 +28,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .base import ExtractionResult, ExtractorBackend
+def is_marker_available() -> bool:
+    """marker-pdf (marker_single コマンド) が使用可能かどうかを判定する"""
+    return shutil.which("marker_single") is not None
 
 
 class MarkerBackend(ExtractorBackend):

@@ -510,6 +510,8 @@ def analyze_paper(
     resume: bool = False,
     force: bool = False,
     stop_after_extract: bool = False,
+    backend: str = "auto",
+    light_mode: bool = False,
 ) -> dict:
     """PDF抽出、AI分析（1ターン一括）、DB登録までを一気通貫で実行する"""
     pdf_path = Path(pdf_path_str)
@@ -577,7 +579,7 @@ def analyze_paper(
     save_state(output_dir, state)
 
     try:
-        # Step 1: PDF テキスト抽出 (Docling)
+        # Step 1: PDF テキスト抽出
         md_file_path = output_dir / f"{clean_name}.md"
 
         if not state["docling_completed"] or not md_file_path.exists():
@@ -587,15 +589,16 @@ def analyze_paper(
             if status_callback:
                 status_callback(
                     "extracting",
-                    "PDFからテキストと図表の抽出を実行中（これには数分かかる場合があります）...",
+                    f"PDFからテキストと図表の抽出を実行中 ({backend}モード)...",
                     None,
                 )
 
             # extractを実行
             result = extract(
                 pdf_path=pdf_path,
-                backend="docling",
+                backend=backend,
                 analyze_tables=False,
+                light_mode=light_mode,
                 base_dir="extracted",
                 progress_callback=lambda step, msg: (
                     status_callback(step, msg, None) if status_callback else None

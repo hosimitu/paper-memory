@@ -254,6 +254,21 @@
 
     <template id="tpl-upload">
         <div class="upload-view">
+            <div id="upload-config-panel" class="upload-config-panel" style="margin-bottom: 20px; padding: 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; display: none; gap: 20px; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label for="pdf-backend-select" style="font-weight: 500; font-size: 0.9rem;" data-i18n="upload.backend_label">PDF抽出エンジン:</label>
+                    <select id="pdf-backend-select" class="lang-select" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-main); color: var(--fg-main);">
+                        <option value="auto" data-i18n="upload.backend_auto">自動 (Docling -> 失敗時Marker)</option>
+                        <option value="docling" data-i18n="upload.backend_docling">Docling (デフォルト)</option>
+                        <option value="marker" data-i18n="upload.backend_marker">Marker (marker-pdf)</option>
+                    </select>
+                </div>
+                <div id="pdf-light-mode-container" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+                    <input type="checkbox" id="pdf-light-mode-checkbox">
+                    <label for="pdf-light-mode-checkbox" data-i18n="upload.light_mode_label">軽量モード (Marker用: CPU/OCRなし)</label>
+                </div>
+            </div>
+
             <div id="upload-dropzone" class="upload-dropzone">
                 <i data-lucide="upload-cloud" class="upload-icon"></i>
                 <h3 data-i18n="upload.dropzone_title">PDFをここにドロップ</h3>

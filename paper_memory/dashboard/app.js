@@ -827,9 +827,43 @@ class App {
         this.contentArea.appendChild(tpl.content.cloneNode(true));
         i18n.applyTranslations(this.contentArea);
 
+        const configPanel = document.getElementById('upload-config-panel');
         const dropzone = document.getElementById('upload-dropzone');
         const fileInput = document.getElementById('upload-file-input');
         const queueList = document.getElementById('queue-list');
+        const backendSelect = document.getElementById('pdf-backend-select');
+        const lightCheckbox = document.getElementById('pdf-light-mode-checkbox');
+
+        // marker-pdf がインストールされているかチェックして設定パネルの表示を制御
+        try {
+            const cfg = await this.fetchJson('/api/config');
+            if (configPanel) {
+                configPanel.style.display = cfg && cfg.marker_available ? 'flex' : 'none';
+            }
+        } catch (e) {
+            if (configPanel) configPanel.style.display = 'none';
+        }
+
+        if (backendSelect && lightCheckbox) {
+            const savedBackend = localStorage.getItem('pdf_backend') || 'auto';
+            const savedLight = localStorage.getItem('pdf_light_mode') === 'true';
+            backendSelect.value = savedBackend;
+            lightCheckbox.checked = savedLight;
+
+            const updateVisibility = () => {
+                const isMarker = backendSelect.value === 'marker' || backendSelect.value === 'auto';
+                document.getElementById('pdf-light-mode-container').style.display = isMarker ? 'flex' : 'none';
+            };
+            updateVisibility();
+
+            backendSelect.addEventListener('change', (e) => {
+                localStorage.setItem('pdf_backend', e.target.value);
+                updateVisibility();
+            });
+            lightCheckbox.addEventListener('change', (e) => {
+                localStorage.setItem('pdf_light_mode', e.target.checked ? 'true' : 'false');
+            });
+        }
 
         if (dropzone && fileInput) {
             dropzone.addEventListener('click', () => fileInput.click());
@@ -1709,10 +1743,20 @@ function initPdfDropzone(appInstance) {
             }
         };
 
+        const backend = localStorage.getItem('pdf_backend') || 'auto';
+        const lightMode = localStorage.getItem('pdf_light_mode') === 'true';
+
         fetch('/api/analyze_paper', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pdf_path: pdfPath, resume, force, stop_after_extract: stopAfterExtract })
+            body: JSON.stringify({
+                pdf_path: pdfPath,
+                resume,
+                force,
+                stop_after_extract: stopAfterExtract,
+                backend: backend,
+                light_mode: lightMode
+            })
         }).then(async response => {
             if (!response.ok) {
                 let errMsg = 'Server error';
