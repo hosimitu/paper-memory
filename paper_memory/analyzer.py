@@ -685,18 +685,39 @@ def analyze_paper(
         store = NoteStore()
         ref_store = ReferenceStore()
 
-        # DOIの自動補完 (もしDOIがなければ)
-        if source_paper_info.get("title") and not source_paper_info.get("doi"):
-            try:
-                doi = fetch_doi_by_title_and_authors(
-                    source_paper_info["title"],
-                    source_paper_info.get("authors"),
-                    source_paper_info.get("year"),
-                )
-                if doi:
-                    source_paper_info["doi"] = doi
-            except Exception:
-                pass
+        # DOIの自動補完・検証
+        doi_conflicts = []
+        if source_paper_info.get("title"):
+            if source_paper_info.get("doi"):
+                try:
+                    from .doi_fetcher import verify_doi_match
+                    v_res = verify_doi_match(
+                        source_paper_info["doi"],
+                        source_paper_info["title"],
+                        source_paper_info.get("authors"),
+                        source_paper_info.get("year"),
+                    )
+                    if v_res.get("status") == "mismatch":
+                        doi_conflicts.append({
+                            "type": "source_paper",
+                            "title": source_paper_info["title"],
+                            "extracted_doi": source_paper_info["doi"],
+                            "fetched_doi": v_res.get("fetched_doi"),
+                            "details": v_res.get("details"),
+                        })
+                except Exception:
+                    pass
+            else:
+                try:
+                    doi = fetch_doi_by_title_and_authors(
+                        source_paper_info["title"],
+                        source_paper_info.get("authors"),
+                        source_paper_info.get("year"),
+                    )
+                    if doi:
+                        source_paper_info["doi"] = doi
+                except Exception:
+                    pass
 
         # ノートの追加
         notes_to_add = []
@@ -726,6 +747,19 @@ def analyze_paper(
             ref_obj = Reference.from_dict(raw_ref)
             ref_store.add(ref_obj)
             added_refs_count += 1
+
+        # DOI不一致情報の紐付けと保存
+        if doi_conflicts:
+            try:
+                with store.db.get_connection() as conn:
+                    cur = conn.execute("SELECT id FROM papers WHERE title = ?", (source_paper_info["title"],))
+                    row = cur.fetchone()
+                    if row:
+                        for conflict in doi_conflicts:
+                            conflict["paper_id"] = row["id"]
+            except Exception:
+                pass
+            state["doi_conflicts"] = doi_conflicts
 
         # 状態の更新
         state["status"] = "completed"
@@ -771,6 +805,7 @@ def analyze_paper(
             "paper_title": source_paper_info["title"],
             "notes_count": len(added_notes),
             "refs_count": added_refs_count,
+            "doi_conflicts": state.get("doi_conflicts", []),
         }
 
     except Exception as e:

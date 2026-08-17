@@ -848,6 +848,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                                     "paper_title": result.get("paper_title", ""),
                                     "notes_count": result.get("notes_count", 0),
                                     "refs_count": result.get("refs_count", 0),
+                                    "doi_conflicts": result.get("doi_conflicts", []),
                                 },
                             )
                     except Exception as err:
@@ -1234,6 +1235,22 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     status_code = 400
                     data = {"error": "Invalid path"}
+
+            elif path == "/api/papers/update-doi":
+                paper_id = post_data.get("paper_id")
+                paper_title = post_data.get("paper_title")
+                doi = post_data.get("doi", "")
+                if not paper_id and not paper_title:
+                    status_code = 400
+                    data = {"error": "paper_id or paper_title is required"}
+                else:
+                    with store.db.get_connection() as conn:
+                        if paper_id:
+                            conn.execute("UPDATE papers SET doi = ? WHERE id = ?", (doi, paper_id))
+                        elif paper_title:
+                            conn.execute("UPDATE papers SET doi = ? WHERE title = ?", (doi, paper_title))
+                        conn.commit()
+                    data = {"status": "success", "message": "DOI updated successfully", "doi": doi}
 
             elif path.startswith("/api/qa/history/") and path.endswith("/delete"):
                 parts = path.strip("/").split("/")

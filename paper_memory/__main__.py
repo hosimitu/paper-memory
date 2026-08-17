@@ -68,6 +68,9 @@ def create_parser() -> argparse.ArgumentParser:
     add_parser.add_argument(
         "--cleanup", action="store_true", help="登録完了後に scratch フォルダを空にする",
     )
+    add_parser.add_argument(
+        "--yes", "-y", action="store_true", help="確認プロンプトをスキップして本文DOIを優先",
+    )
 
     # --- search コマンド ---
     search_parser = subparsers.add_parser("search", help="セマンティック検索")
@@ -163,6 +166,9 @@ def create_parser() -> argparse.ArgumentParser:
     refs_add_parser.add_argument(
         "--cleanup", action="store_true", help="登録完了後に scratch フォルダを空にする",
     )
+    refs_add_parser.add_argument(
+        "--yes", "-y", action="store_true", help="確認プロンプトをスキップして本文DOIを優先",
+    )
 
     # --- refs-update コマンド ---
     refs_update_parser = subparsers.add_parser("refs-update", help="参考文献のステータスを更新")
@@ -223,8 +229,51 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
         sys.exit(1)
 
     # 配列なら一括追加、オブジェクトなら単一追加、または最適化フォーマット
-    from .doi_fetcher import fetch_doi_by_title_and_authors
-    
+    from .doi_fetcher import fetch_doi_by_title_and_authors, fetch_doi_details, is_doi_match
+
+    def _resolve_or_verify_source_paper_doi(sp: dict) -> None:
+        if not isinstance(sp, dict):
+            return
+        title = sp.get("title", "")
+        doi = sp.get("doi", "")
+        authors = sp.get("authors", [])
+        year = sp.get("year", None)
+
+        if title and doi:
+            print(f"🔍 APIによるDOI検証中: {title}", file=sys.stderr)
+            details = fetch_doi_details(title, authors, year)
+            if details and details.get("doi"):
+                fetched_doi = details["doi"]
+                if not is_doi_match(doi, fetched_doi):
+                    sim_pct = int(details.get("title_similarity", 0) * 100)
+                    fetched_year = details.get("year") or "不明"
+                    print(f"\n⚠️ 【DOI不一致を検出】", file=sys.stderr)
+                    print(f"論文タイトル: {title}", file=sys.stderr)
+                    print(f"  [1] 本文から抽出したDOI : {doi}", file=sys.stderr)
+                    print(f"  [2] API検索で取得したDOI: {fetched_doi} (類似度: {sim_pct}%, 出版年: {fetched_year})", file=sys.stderr)
+
+                    chosen_doi = doi
+                    if getattr(args, "yes", False) or not sys.stdin.isatty():
+                        print("ℹ️ 自動モード（または非対話環境）のため、[1] 本文抽出DOI を採用します。", file=sys.stderr)
+                    else:
+                        ans = input("どちらを採用しますか？ [1/2] (デフォルト: 1): ").strip()
+                        if ans == "2":
+                            chosen_doi = fetched_doi
+                            print(f"✅ [2] API検索DOI ({chosen_doi}) を採用しました。", file=sys.stderr)
+                        else:
+                            print(f"✅ [1] 本文抽出DOI ({chosen_doi}) を採用しました。", file=sys.stderr)
+                    sp["doi"] = chosen_doi
+                else:
+                    print(f"✅ DOI検証OK (一致): {doi}", file=sys.stderr)
+        elif title and not doi:
+            print(f"🔍 メイン論文のDOIを検索中: {title}", file=sys.stderr)
+            fetched_doi = fetch_doi_by_title_and_authors(title, authors, year)
+            if fetched_doi:
+                sp["doi"] = fetched_doi
+                print(f"✅ DOIを取得しました: {fetched_doi}", file=sys.stderr)
+            else:
+                print(f"⚠️ DOIを取得できませんでした", file=sys.stderr)
+
     if isinstance(data, list):
         # 個別のノートリストの場合（通常はsource_paperが含まれるはずだが）
         notes = []
@@ -235,13 +284,7 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
                 print("⚠️ 警告: ノートに source_paper 情報が含まれていません。'Unknown Paper' として登録されます。", file=sys.stderr)
             
             sp = d.get("source_paper", {})
-            if isinstance(sp, dict) and sp.get("title") and not sp.get("doi"):
-                print(f"🔍 メイン論文のDOIを検索中: {sp['title']}", file=sys.stderr)
-                doi = fetch_doi_by_title_and_authors(sp["title"], sp.get("authors"), sp.get("year"))
-                if doi:
-                    sp["doi"] = doi
-                    print(f"✅ DOIを取得しました: {doi}", file=sys.stderr)
-            
+            _resolve_or_verify_source_paper_doi(sp)
             notes.append(PaperNote.from_dict(d))
         
         try:
@@ -288,14 +331,7 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
         if "notes" in data and isinstance(data["notes"], list) and "source_paper" in data:
             # トークン節約のための最適化フォーマット
             source_paper = data["source_paper"]
-            
-            # DOI補完
-            if isinstance(source_paper, dict) and source_paper.get("title") and not source_paper.get("doi"):
-                print(f"🔍 メイン論文のDOIを検索中: {source_paper['title']}", file=sys.stderr)
-                doi = fetch_doi_by_title_and_authors(source_paper["title"], source_paper.get("authors"), source_paper.get("year"))
-                if doi:
-                    source_paper["doi"] = doi
-                    print(f"✅ DOIを取得しました: {doi}", file=sys.stderr)
+            _resolve_or_verify_source_paper_doi(source_paper)
             
             notes = []
             for d in data["notes"]:
@@ -324,12 +360,7 @@ def cmd_add(args, store: NoteStore, ref_store: ReferenceStore) -> None:
         else:
             # 単一のノートオブジェクトの場合
             sp = data.get("source_paper", {})
-            if isinstance(sp, dict) and sp.get("title") and not sp.get("doi"):
-                print(f"🔍 メイン論文のDOIを検索中: {sp['title']}", file=sys.stderr)
-                doi = fetch_doi_by_title_and_authors(sp["title"], sp.get("authors"), sp.get("year"))
-                if doi:
-                    sp["doi"] = doi
-                    print(f"✅ DOIを取得しました: {doi}", file=sys.stderr)
+            _resolve_or_verify_source_paper_doi(sp)
 
             note = PaperNote.from_dict(data)
             try:
@@ -862,7 +893,7 @@ def cmd_refs_add(args, ref_store: ReferenceStore, note_store: NoteStore) -> None
     skipped_dup_ref = []    # 参考文献リストに既に登録済み
     skipped_dup_note = []   # 解析済みノートが既に存在
 
-    from .doi_fetcher import fetch_doi_by_title_and_authors
+    from .doi_fetcher import fetch_doi_by_title_and_authors, fetch_doi_details, is_doi_match
 
     for item in data:
         if not isinstance(item, dict):
@@ -887,7 +918,34 @@ def cmd_refs_add(args, ref_store: ReferenceStore, note_store: NoteStore) -> None
             print("⚠️ タイトルもDOIもない参考文献エントリをスキップしました", file=sys.stderr)
             continue
 
-        if title and not doi:
+        if title and doi:
+            print(f"🔍 APIによるDOI検証中: {title}", file=sys.stderr)
+            details = fetch_doi_details(title, authors, year)
+            if details and details.get("doi"):
+                fetched_doi = details["doi"]
+                if not is_doi_match(doi, fetched_doi):
+                    sim_pct = int(details.get("title_similarity", 0) * 100)
+                    fetched_year = details.get("year") or "不明"
+                    print(f"\n⚠️ 【DOI不一致を検出】", file=sys.stderr)
+                    print(f"タイトル: {title}", file=sys.stderr)
+                    print(f"  [1] 本文から抽出したDOI : {doi}", file=sys.stderr)
+                    print(f"  [2] API検索で取得したDOI: {fetched_doi} (類似度: {sim_pct}%, 出版年: {fetched_year})", file=sys.stderr)
+
+                    chosen_doi = doi
+                    if getattr(args, "yes", False) or not sys.stdin.isatty():
+                        print("ℹ️ 自動モード（または非対話環境）のため、[1] 本文抽出DOI を採用します。", file=sys.stderr)
+                    else:
+                        ans = input("どちらを採用しますか？ [1/2] (デフォルト: 1): ").strip()
+                        if ans == "2":
+                            chosen_doi = fetched_doi
+                            print(f"✅ [2] API検索DOI ({chosen_doi}) を採用しました。", file=sys.stderr)
+                        else:
+                            print(f"✅ [1] 本文抽出DOI ({chosen_doi}) を採用しました。", file=sys.stderr)
+                    item["doi"] = chosen_doi
+                    doi = chosen_doi
+                else:
+                    print(f"✅ DOI検証OK (一致): {doi}", file=sys.stderr)
+        elif title and not doi:
             print(f"🔍 APIからDOIを検索中: {title}", file=sys.stderr)
             fetched_doi = fetch_doi_by_title_and_authors(title, authors, year)
             if fetched_doi:

@@ -1881,6 +1881,50 @@ function initPdfDropzone(appInstance) {
         const countBlock = data.status === 'extracted_only'
             ? ''
             : `<p>Notes: ${data.notes_count || 0} / References: ${data.refs_count || 0}</p>`;
+
+        let conflictHtml = '';
+        if (data.doi_conflicts && data.doi_conflicts.length > 0) {
+            const conflict = data.doi_conflicts[0];
+            const simPct = conflict.details ? Math.round((conflict.details.title_similarity || 0) * 100) : null;
+            const simText = simPct ? ` (${simPct}%)` : '';
+            const extractedUrl = conflict.extracted_doi ? (conflict.extracted_doi.startsWith('http') ? conflict.extracted_doi : 'https://doi.org/' + conflict.extracted_doi) : '#';
+            const fetchedUrl = conflict.fetched_doi ? (conflict.fetched_doi.startsWith('http') ? conflict.fetched_doi : 'https://doi.org/' + conflict.fetched_doi) : '#';
+
+            conflictHtml = `
+                <div class="doi-conflict-card">
+                    <div class="doi-conflict-header">
+                        <span>⚠️</span> ${i18n.t('analysis.doi_conflict_title')}
+                    </div>
+                    <p class="doi-conflict-desc">${i18n.t('analysis.doi_conflict_desc')}</p>
+                    <div class="doi-choices-list">
+                        <div class="doi-choice-item selected" id="item-choice-extracted">
+                            <button type="button" class="btn-doi-select" id="btn-choice-extracted">
+                                <span class="doi-choice-title">
+                                    <span class="doi-radio">●</span> [1] ${i18n.t('analysis.use_extracted_doi')}
+                                </span>
+                                <span class="doi-code-text">${conflict.extracted_doi}</span>
+                            </button>
+                            <a href="${extractedUrl}" target="_blank" rel="noopener noreferrer" class="doi-external-link" title="${i18n.t('analysis.open_paper')}">
+                                🔗 ${i18n.t('analysis.open_paper')}
+                            </a>
+                        </div>
+                        <div class="doi-choice-item" id="item-choice-fetched">
+                            <button type="button" class="btn-doi-select" id="btn-choice-fetched">
+                                <span class="doi-choice-title">
+                                    <span class="doi-radio">○</span> [2] ${i18n.t('analysis.use_fetched_doi')}${simText}
+                                </span>
+                                <span class="doi-code-text">${conflict.fetched_doi}</span>
+                            </button>
+                            <a href="${fetchedUrl}" target="_blank" rel="noopener noreferrer" class="doi-external-link" title="${i18n.t('analysis.open_paper')}">
+                                🔗 ${i18n.t('analysis.open_paper')}
+                            </a>
+                        </div>
+                    </div>
+                    <div id="doi-update-status" class="doi-update-status"></div>
+                </div>
+            `;
+        }
+
         // onClose が渡された場合は「OK」ボタンを表示し、ユーザーが明示的に閉じるまで待機する
         const okBtnHtml = onClose
             ? `<button class="ok-btn" id="btn-analysis-ok">✔ OK</button>`
@@ -1889,8 +1933,52 @@ function initPdfDropzone(appInstance) {
             <h3>${titleText}</h3>
             ${paperTitle ? `<p><strong>${paperTitle}</strong></p>` : ''}
             ${countBlock}
+            ${conflictHtml}
             ${okBtnHtml}
         `;
+
+        if (data.doi_conflicts && data.doi_conflicts.length > 0) {
+            const conflict = data.doi_conflicts[0];
+            const itemExtracted = document.getElementById('item-choice-extracted');
+            const itemFetched = document.getElementById('item-choice-fetched');
+            const btnExtracted = document.getElementById('btn-choice-extracted');
+            const btnFetched = document.getElementById('btn-choice-fetched');
+            const statusEl = document.getElementById('doi-update-status');
+
+            async function updatePaperDoi(chosenDoi, activeItem, inactiveItem) {
+                try {
+                    activeItem.classList.add('selected');
+                    const activeRadio = activeItem.querySelector('.doi-radio');
+                    if (activeRadio) activeRadio.textContent = '●';
+
+                    inactiveItem.classList.remove('selected');
+                    const inactiveRadio = inactiveItem.querySelector('.doi-radio');
+                    if (inactiveRadio) inactiveRadio.textContent = '○';
+
+                    const resp = await fetch('/api/papers/update-doi', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            paper_id: conflict.paper_id,
+                            paper_title: conflict.title,
+                            doi: chosenDoi
+                        })
+                    });
+                    if (resp.ok) {
+                        statusEl.textContent = `✔ ${i18n.t('analysis.doi_updated')}: ${chosenDoi}`;
+                        statusEl.style.display = 'block';
+                    }
+                } catch (e) {
+                    console.error("Failed to update DOI", e);
+                }
+            }
+
+            if (btnExtracted && btnFetched && itemExtracted && itemFetched) {
+                btnExtracted.onclick = () => updatePaperDoi(conflict.extracted_doi, itemExtracted, itemFetched);
+                btnFetched.onclick = () => updatePaperDoi(conflict.fetched_doi, itemFetched, itemExtracted);
+            }
+        }
+
         // OKボタンにコールバックを登録
         if (onClose) {
             const btn = document.getElementById('btn-analysis-ok');
