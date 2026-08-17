@@ -513,7 +513,11 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     "api_usage": {"used": update_api_usage(), "limit": API_LIMIT_RPM},
                 }
             elif path == "/api/config":
-                data = {"language": DEFAULT_LANGUAGE}
+                from .extractor import is_marker_available
+                data = {
+                    "language": DEFAULT_LANGUAGE,
+                    "marker_available": is_marker_available(),
+                }
             elif path == "/api/qa/formats":
                 data = list_formats()
             elif path == "/api/queue":
@@ -784,6 +788,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 resume = post_data.get("resume", False)
                 force = post_data.get("force", False)
                 stop_after_extract = post_data.get("stop_after_extract", False)
+                backend = post_data.get("backend", "auto")
+                light_mode = post_data.get("light_mode", False)
 
                 if not pdf_path:
                     status_code = 400
@@ -822,6 +828,8 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                             resume=resume,
                             force=force,
                             stop_after_extract=stop_after_extract,
+                            backend=backend,
+                            light_mode=light_mode,
                         )
                         if stop_after_extract:
                             send_sse(
