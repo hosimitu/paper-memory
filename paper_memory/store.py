@@ -653,6 +653,66 @@ class NoteStore:
             "type_distribution": type_distribution,
         }
 
+    def get_graph_data(self) -> dict:
+        """グラフビュー用の全ノート・リンクデータを一括取得する"""
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            
+            # 各ノートのリンク数をカウント（source/target双方）
+            cur.execute("""
+                SELECT note_id, COUNT(*) as link_cnt FROM (
+                    SELECT source_id AS note_id FROM note_links
+                    UNION ALL
+                    SELECT target_id AS note_id FROM note_links
+                )
+                GROUP BY note_id
+            """)
+            link_counts = {r["note_id"]: r["link_cnt"] for r in cur.fetchall()}
+
+            # ノートと論文情報の一括取得
+            cur.execute("""
+                SELECT n.id, n.content, n.element_type, n.keywords, n.tags, n.paper_id,
+                       p.title as paper_title, p.year as paper_year
+                FROM notes n
+                LEFT JOIN papers p ON n.paper_id = p.id
+            """)
+            nodes = []
+            for r in cur.fetchall():
+                content_parsed = self._parse_maybe_json(r["content"])
+                keywords_parsed = self._parse_maybe_json(r["keywords"])
+                tags_parsed = self._parse_maybe_json(r["tags"])
+                nodes.append({
+                    "id": r["id"],
+                    "content": content_parsed,
+                    "element_type": r["element_type"],
+                    "paper_id": r["paper_id"],
+                    "paper_title": r["paper_title"] or "",
+                    "paper_year": r["paper_year"],
+                    "keywords": keywords_parsed if isinstance(keywords_parsed, list) else [],
+                    "tags": tags_parsed if isinstance(tags_parsed, list) else [],
+                    "link_count": link_counts.get(r["id"], 0),
+                })
+
+            # エッジ情報の一括取得
+            cur.execute("SELECT source_id, target_id, reason FROM note_links")
+            edges = []
+            for r in cur.fetchall():
+                edges.append({
+                    "source": r["source_id"],
+                    "target": r["target_id"],
+                    "reason": self._parse_maybe_json(r["reason"]) or "",
+                })
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "meta": {
+                "total_nodes": len(nodes),
+                "total_edges": len(edges),
+                "generated_at": datetime.now().isoformat(),
+            }
+        }
+
     # ========================================
     # QA履歴管理
     # ========================================
