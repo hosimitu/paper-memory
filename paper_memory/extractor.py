@@ -217,6 +217,7 @@ def main_extract(args) -> None:
                 analyze_tables=getattr(args, "analyze_tables", False),
                 light_mode=getattr(args, "light", False),
                 base_dir=getattr(args, "base_dir", "extracted"),
+                convert_footnotes=not getattr(args, "no_footnotes", False),
             )
 
         print(f"\n✅ 解析完了！")

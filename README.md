@@ -151,7 +151,7 @@ You can call the Python helper directly for detailed data management.
 
 ### Knowledge Note Management
 ```powershell
-python -m paper_memory extract "pdf/paper.pdf" [--analyze-tables] # Extract text & images from PDF
+python -m paper_memory extract "pdf/paper.pdf" [--analyze-tables] [--no-footnotes] # Extract text & images from PDF (auto footnote conversion)
 python -m paper_memory add --file scratch/notes.json [--cleanup]   # Add notes from JSON file
 python -m paper_memory search --query "query" [--n 10] [--threshold 0.45] [--expand-paper]
 python -m paper_memory list [--paper "title"] [--type "type"]    # List notes
