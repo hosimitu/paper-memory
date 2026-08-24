@@ -96,6 +96,26 @@ API_USAGE_LOG = []
 API_LIMIT_RPM = 15
 
 
+# グラフデータのメモリキャッシュ
+_graph_cache = {
+    "data": None,
+    "json_bytes": None,
+    "etag": None,
+    "generated_at": None,
+}
+
+
+def invalidate_graph_cache():
+    """ノートやリンクが変更された際にグラフキャッシュを無効化する"""
+    global _graph_cache
+    _graph_cache = {
+        "data": None,
+        "json_bytes": None,
+        "etag": None,
+        "generated_at": None,
+    }
+
+
 def update_api_usage():
     global API_USAGE_LOG
     now = datetime.datetime.now()
@@ -512,6 +532,14 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                     "references": ref_store.get_stats(),
                     "api_usage": {"used": update_api_usage(), "limit": API_LIMIT_RPM},
                 }
+            elif path == "/api/graph":
+                global _graph_cache
+                if _graph_cache["data"] is not None:
+                    data = _graph_cache["data"]
+                else:
+                    data = store.get_graph_data()
+                    _graph_cache["data"] = data
+                    _graph_cache["generated_at"] = datetime.datetime.now().isoformat()
             elif path == "/api/config":
                 from .extractor import is_marker_available
                 data = {
@@ -842,6 +870,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                                 },
                             )
                         else:
+                            invalidate_graph_cache()
                             send_sse(
                                 "complete",
                                 {
@@ -1222,6 +1251,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         paper_id = int(parts[2])
                         result = store.delete_paper(paper_id)
                         if result.get("deleted_paper"):
+                            invalidate_graph_cache()
                             data = {
                                 "status": "success",
                                 "deleted_notes": result.get("deleted_notes"),

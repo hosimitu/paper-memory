@@ -16,15 +16,30 @@ const getTypeLabels = () => ({
     definition: i18n.t('type.definition')
 });
 
+const TYPE_HEX_COLORS = {
+    background: '#6366f1',
+    method: '#10b981',
+    result: '#f59e0b',
+    discussion: '#8b5cf6',
+    conclusion: '#3b82f6',
+    insight: '#ec4899',
+    limitation: '#ef4444',
+    future_work: '#06b6d4',
+    definition: '#84cc16',
+    other: '#94a3b8'
+};
+
 const TYPE_COLORS = {
     background: 'var(--color-background)',
     method: 'var(--color-method)',
     result: 'var(--color-result)',
     discussion: 'var(--color-discussion)',
+    conclusion: '#3b82f6',
     insight: 'var(--color-insight)',
     limitation: 'var(--color-limitation)',
     future_work: 'var(--color-future)',
-    definition: 'var(--color-definition)'
+    definition: 'var(--color-definition)',
+    other: 'var(--text-muted)'
 };
 
 // キーワードを現在の言語に合わせて平滑化した文字列配列として取得する
@@ -221,6 +236,7 @@ class App {
             papers: i18n.t('nav.papers'),
             references: i18n.t('nav.references'),
             search: i18n.t('nav.search'),
+            graph: i18n.t('nav.graph'),
             qa: i18n.t('nav.qa')
         };
         this.viewTitle.innerText = titles[view] || 'Paper Memory';
@@ -234,6 +250,7 @@ class App {
                 case 'papers': await this.renderPapers(); break;
                 case 'references': await this.renderReferences(); break;
                 case 'search': await this.renderSearch(params); break;
+                case 'graph': await this.renderGraph(params); break;
                 case 'qa': await this.renderQA(params); break;
             }
         } catch (err) {
@@ -1589,6 +1606,454 @@ class App {
             badge.classList.add('disconnected');
             text.innerText = i18n.t('status.disconnected');
         }
+    }
+
+    async renderGraph(params = {}) {
+        const graphData = await this.fetchJson('/graph');
+        if (this.currentView !== 'graph') return;
+
+        const template = document.getElementById('tpl-graph');
+        const content = template.content.cloneNode(true);
+        this.contentArea.innerHTML = '';
+        this.contentArea.appendChild(content);
+
+        const cyContainer = document.getElementById('cy');
+        const tooltip = document.getElementById('graph-tooltip');
+        const backBtn = document.getElementById('btn-graph-back-global');
+        const localBadge = document.getElementById('graph-local-badge');
+        const typeSelect = document.getElementById('graph-type-select');
+        const paperSelect = document.getElementById('graph-paper-select');
+        const searchInput = document.getElementById('graph-search-input');
+        const resetBtn = document.getElementById('btn-graph-reset-view');
+        const statNodes = document.getElementById('graph-stat-nodes');
+        const statEdges = document.getElementById('graph-stat-edges');
+        const legendItems = document.getElementById('graph-legend-items');
+
+        const nodes = graphData.nodes || [];
+        const edges = graphData.edges || [];
+
+        if (nodes.length === 0) {
+            cyContainer.innerHTML = `<div class="empty-state" style="padding: 40px; text-align: center; color: var(--text-muted);">${i18n.t('graph.no_data')}</div>`;
+            return;
+        }
+
+        // 論文セレクトボックスの構築
+        const papersMap = new Map();
+        nodes.forEach(n => {
+            if (n.paper_title && !papersMap.has(n.paper_title)) {
+                papersMap.set(n.paper_title, n.paper_id);
+            }
+        });
+        papersMap.forEach((paperId, paperTitle) => {
+            const opt = document.createElement('option');
+            opt.value = paperTitle;
+            opt.textContent = paperTitle.length > 35 ? paperTitle.slice(0, 35) + '...' : paperTitle;
+            paperSelect.appendChild(opt);
+        });
+
+        // 凡例 (Legend) の構築
+        const typeLabels = getTypeLabels();
+        legendItems.innerHTML = '';
+        Object.keys(TYPE_HEX_COLORS).forEach(type => {
+            if (type === 'other') return;
+            const item = document.createElement('div');
+            item.className = 'graph-legend-item';
+            item.innerHTML = `<span class="graph-legend-dot" style="background-color: ${TYPE_HEX_COLORS[type]}"></span><span>${typeLabels[type] || type}</span>`;
+            item.onclick = () => {
+                typeSelect.value = typeSelect.value === type ? '' : type;
+                applyFilters();
+            };
+            legendItems.appendChild(item);
+        });
+
+        // 統計の初期値
+        statNodes.textContent = nodes.length;
+        statEdges.textContent = edges.length;
+
+        // Cytoscape 要素の作成
+        const isDarkMode = !document.body.classList.contains('light-mode');
+        const textColor = isDarkMode ? '#e2e8f0' : '#334155';
+        const edgeColor = isDarkMode ? 'rgba(148, 163, 184, 0.25)' : 'rgba(148, 163, 184, 0.4)';
+        const accentColor = '#6366f1';
+
+        const elements = [
+            ...nodes.map(n => {
+                let contentText = '';
+                if (typeof n.content === 'object' && n.content !== null) {
+                    contentText = i18n.getTranslatedString(n.content);
+                } else {
+                    contentText = String(n.content || '');
+                }
+                const labelText = contentText.length > 20 ? contentText.slice(0, 20) + '...' : contentText;
+
+                return {
+                    group: 'nodes',
+                    data: {
+                        id: n.id,
+                        label: labelText,
+                        fullContent: contentText,
+                        elementType: n.element_type || 'other',
+                        paperTitle: n.paper_title || '',
+                        paperId: n.paper_id,
+                        paperYear: n.paper_year,
+                        keywords: n.keywords || [],
+                        tags: n.tags || [],
+                        linkCount: n.link_count || 0,
+                        color: TYPE_HEX_COLORS[n.element_type] || '#94a3b8',
+                        size: Math.min(22 + (n.link_count || 0) * 4, 52)
+                    }
+                };
+            }),
+            ...edges.map((e, idx) => ({
+                group: 'edges',
+                data: {
+                    id: `e_${e.source}_${e.target}_${idx}`,
+                    source: e.source,
+                    target: e.target,
+                    reason: typeof e.reason === 'object' && e.reason !== null ? i18n.getTranslatedString(e.reason) : String(e.reason || '')
+                }
+            }))
+        ];
+
+// 標準内蔵の力指向 (cose) レイアウトを使用
+
+        const cy = cytoscape({
+            container: cyContainer,
+            elements: elements,
+            style: [
+                {
+                    selector: 'node',
+                    style: {
+                        'background-color': 'data(color)',
+                        'width': 'data(size)',
+                        'height': 'data(size)',
+                        'label': 'data(label)',
+                        'color': textColor,
+                        'font-size': '10px',
+                        'font-family': 'Inter, "Noto Sans JP", sans-serif',
+                        'text-valign': 'bottom',
+                        'text-margin-y': 4,
+                        'text-max-width': '100px',
+                        'text-wrap': 'ellipsis',
+                        'border-width': 2,
+                        'border-color': isDarkMode ? '#1e293b' : '#ffffff',
+                        'transition-property': 'background-color, border-color, border-width, opacity, width, height',
+                        'transition-duration': '0.2s',
+                        'cursor': 'pointer'
+                    }
+                },
+                {
+                    selector: 'node:selected',
+                    style: {
+                        'border-color': accentColor,
+                        'border-width': 4,
+                        'shadow-blur': 12,
+                        'shadow-color': accentColor,
+                        'shadow-opacity': 0.8
+                    }
+                },
+                {
+                    selector: 'node.highlighted',
+                    style: {
+                        'border-color': accentColor,
+                        'border-width': 3,
+                        'opacity': 1,
+                        'z-index': 100
+                    }
+                },
+                {
+                    selector: 'node.dimmed',
+                    style: {
+                        'opacity': 0.12
+                    }
+                },
+                {
+                    selector: 'node.hidden',
+                    style: {
+                        'display': 'none'
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: {
+                        'width': 1.5,
+                        'line-color': edgeColor,
+                        'curve-style': 'bezier',
+                        'target-arrow-shape': 'triangle',
+                        'target-arrow-color': edgeColor,
+                        'arrow-scale': 0.8,
+                        'opacity': 0.7,
+                        'transition-property': 'line-color, target-arrow-color, width, opacity',
+                        'transition-duration': '0.2s'
+                    }
+                },
+                {
+                    selector: 'edge.highlighted',
+                    style: {
+                        'line-color': accentColor,
+                        'target-arrow-color': accentColor,
+                        'width': 2.5,
+                        'opacity': 1,
+                        'z-index': 90
+                    }
+                },
+                {
+                    selector: 'edge.dimmed',
+                    style: {
+                        'opacity': 0.05
+                    }
+                },
+                {
+                    selector: 'edge.hidden',
+                    style: {
+                        'display': 'none'
+                    }
+                }
+            ],
+            layout: {
+                name: 'cose',
+                animate: true,
+                animationDuration: 800,
+                fit: true,
+                padding: 40,
+                randomize: false,
+                nodeRepulsion: function(node) { return 500000; },
+                nodeOverlap: 20,
+                idealEdgeLength: function(edge) { return 110; },
+                edgeElasticity: function(edge) { return 100; },
+                nestingFactor: 5,
+                gravity: 80,
+                numIter: 1000,
+                initialTemp: 200,
+                coolingFactor: 0.95,
+                minTemp: 1.0
+            }
+        });
+
+        this.cy = cy;
+        let isLocalMode = false;
+        let selectedNodeId = null;
+
+        // ツールチップ関数
+        const showTooltip = (node, renderedPos) => {
+            const data = node.data();
+            const typeLabel = typeLabels[data.elementType] || data.elementType;
+            const containerRect = cyContainer.getBoundingClientRect();
+
+            let tagsHtml = '';
+            if (data.tags && data.tags.length > 0) {
+                const tagsList = getKeywordsList(data.tags);
+                tagsHtml = tagsList.slice(0, 3).map(t => `<span class="graph-tooltip-tag">${t}</span>`).join('');
+            }
+
+            tooltip.innerHTML = `
+                <div class="graph-tooltip-header">
+                    <span class="graph-tooltip-type" style="background-color: ${data.color}22; color: ${data.color}; border: 1px solid ${data.color}44;">${typeLabel}</span>
+                    <span class="graph-tooltip-links"><i data-lucide="share-2" style="width:12px;height:12px;"></i> ${data.linkCount}</span>
+                </div>
+                ${data.paperTitle ? `<div class="graph-tooltip-paper">${data.paperTitle} ${data.paperYear ? `(${data.paperYear})` : ''}</div>` : ''}
+                <div class="graph-tooltip-content">${data.fullContent}</div>
+                ${tagsHtml ? `<div class="graph-tooltip-footer">${tagsHtml}</div>` : ''}
+            `;
+            lucide.createIcons({ root: tooltip });
+
+            tooltip.style.display = 'block';
+            const tipWidth = tooltip.offsetWidth;
+            const tipHeight = tooltip.offsetHeight;
+
+            let left = renderedPos.x + 15;
+            let top = renderedPos.y - tipHeight / 2;
+
+            if (left + tipWidth > containerRect.width - 20) {
+                left = renderedPos.x - tipWidth - 15;
+            }
+            if (top < 10) top = 10;
+            if (top + tipHeight > containerRect.height - 10) {
+                top = containerRect.height - tipHeight - 10;
+            }
+
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${top}px`;
+        };
+
+        const hideTooltip = () => {
+            tooltip.style.display = 'none';
+        };
+
+        // ローカルグラフモードの切り替え
+        const enterLocalMode = (node) => {
+            isLocalMode = true;
+            selectedNodeId = node.id();
+            backBtn.style.display = 'inline-flex';
+            localBadge.style.display = 'inline-flex';
+
+            const neighborhood = node.closedNeighborhood();
+            cy.elements().addClass('hidden');
+            neighborhood.removeClass('hidden');
+
+            // 統計更新
+            statNodes.textContent = neighborhood.nodes().length;
+            statEdges.textContent = neighborhood.edges().length;
+
+            cy.layout({
+                name: 'cose',
+                animate: true,
+                animationDuration: 600,
+                fit: true,
+                padding: 50,
+                randomize: false,
+                nodeRepulsion: function(node) { return 600000; },
+                idealEdgeLength: function(edge) { return 140; },
+                gravity: 60
+            }).run();
+        };
+
+        const exitLocalMode = () => {
+            isLocalMode = false;
+            selectedNodeId = null;
+            backBtn.style.display = 'none';
+            localBadge.style.display = 'none';
+
+            cy.elements().removeClass('hidden dimmed highlighted');
+            applyFilters();
+
+            cy.layout({
+                name: 'cose',
+                animate: true,
+                animationDuration: 800,
+                fit: true,
+                padding: 40,
+                randomize: false,
+                nodeRepulsion: function(node) { return 500000; },
+                idealEdgeLength: function(edge) { return 110; },
+                gravity: 80
+            }).run();
+        };
+
+        // フィルター適用処理
+        const applyFilters = () => {
+            const selectedType = typeSelect.value;
+            const selectedPaper = paperSelect.value;
+            const searchTerm = (searchInput.value || '').trim().toLowerCase();
+
+            let visibleNodes = cy.nodes();
+
+            cy.elements().removeClass('hidden dimmed');
+
+            if (selectedType) {
+                visibleNodes = visibleNodes.filter(`[elementType = "${selectedType}"]`);
+            }
+            if (selectedPaper) {
+                visibleNodes = visibleNodes.filter(`[paperTitle = "${selectedPaper}"]`);
+            }
+
+            if (searchTerm) {
+                visibleNodes = visibleNodes.filter(node => {
+                    const data = node.data();
+                    const contentStr = (data.fullContent || '').toLowerCase();
+                    const labelStr = (data.label || '').toLowerCase();
+                    const paperStr = (data.paperTitle || '').toLowerCase();
+                    const kwStr = (data.keywords || []).join(' ').toLowerCase();
+                    const tagStr = (data.tags || []).join(' ').toLowerCase();
+                    return contentStr.includes(searchTerm) || labelStr.includes(searchTerm) || paperStr.includes(searchTerm) || kwStr.includes(searchTerm) || tagStr.includes(searchTerm);
+                });
+            }
+
+            const hiddenNodes = cy.nodes().difference(visibleNodes);
+            hiddenNodes.addClass('hidden');
+            hiddenNodes.connectedEdges().addClass('hidden');
+
+            const activeEdges = cy.edges().filter(edge => !edge.source().hasClass('hidden') && !edge.target().hasClass('hidden'));
+
+            statNodes.textContent = visibleNodes.length;
+            statEdges.textContent = activeEdges.length;
+        };
+
+        // イベントバインド
+        cy.on('mouseover', 'node', (evt) => {
+            const node = evt.target;
+            showTooltip(node, evt.renderedPosition);
+
+            if (!isLocalMode) {
+                const neighborhood = node.closedNeighborhood();
+                cy.elements().addClass('dimmed');
+                neighborhood.removeClass('dimmed').addClass('highlighted');
+            }
+        });
+
+        cy.on('mouseout', 'node', () => {
+            hideTooltip();
+            if (!isLocalMode) {
+                cy.elements().removeClass('dimmed highlighted');
+            }
+        });
+
+        let tapTimeout = null;
+        cy.on('tap', 'node', (evt) => {
+            const node = evt.target;
+            if (tapTimeout) {
+                // ダブルタップ（モーダル表示）
+                clearTimeout(tapTimeout);
+                tapTimeout = null;
+                this.showNoteModal(node.id());
+            } else {
+                tapTimeout = setTimeout(() => {
+                    tapTimeout = null;
+                    // シングルタップ（ローカルモード切替）
+                    if (!isLocalMode) {
+                        enterLocalMode(node);
+                    } else if (selectedNodeId === node.id()) {
+                        this.showNoteModal(node.id());
+                    } else {
+                        enterLocalMode(node);
+                    }
+                }, 250);
+            }
+        });
+
+        cy.on('tap', (evt) => {
+            if (evt.target === cy) {
+                hideTooltip();
+                if (!isLocalMode) {
+                    cy.elements().removeClass('dimmed highlighted');
+                }
+            }
+        });
+
+        // ツールバーイベント
+        backBtn.onclick = () => exitLocalMode();
+        typeSelect.onchange = () => applyFilters();
+        paperSelect.onchange = () => applyFilters();
+        searchInput.oninput = () => applyFilters();
+        resetBtn.onclick = () => {
+            typeSelect.value = '';
+            paperSelect.value = '';
+            searchInput.value = '';
+            if (isLocalMode) {
+                exitLocalMode();
+            } else {
+                cy.elements().removeClass('hidden dimmed highlighted');
+                statNodes.textContent = nodes.length;
+                statEdges.textContent = edges.length;
+                cy.fit(null, 40);
+            }
+        };
+
+        // 初期パラメータ処理 (noteId または paperId)
+        if (params.paperId || params.title) {
+            const targetTitle = params.title || '';
+            if (targetTitle) {
+                paperSelect.value = targetTitle;
+                applyFilters();
+            }
+        } else if (params.noteId) {
+            const targetNode = cy.getElementById(params.noteId);
+            if (targetNode && targetNode.length > 0) {
+                enterLocalMode(targetNode);
+            }
+        }
+
+        lucide.createIcons();
     }
 
     onLanguageChange() {
