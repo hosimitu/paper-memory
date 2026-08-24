@@ -245,7 +245,18 @@ class DoclingBackend(ExtractorBackend):
                         markdown_content, all_formula_images
                     )
 
-            # 7. Markdown ファイルを保存
+            # 7. 引用文献の脚注化（オプション、デフォルト有効）
+            convert_footnotes = options.get("convert_footnotes", True)
+            if convert_footnotes:
+                try:
+                    from ..citation_converter import CitationConverter
+                    print("  [docling] 引用文献を脚注記法に変換中...")
+                    converter = CitationConverter()
+                    markdown_content = converter.convert(markdown_content)
+                except Exception as e:
+                    print(f"  [Warning] 脚注変換中にエラーが発生しました（スキップします）: {e}", file=sys.stderr)
+
+            # 8. Markdown ファイルを保存
             md_path = output_dir / f"{output_dir.name}.md"
             md_path.write_text(markdown_content, encoding="utf-8")
 

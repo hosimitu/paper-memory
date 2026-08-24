@@ -159,7 +159,7 @@ python -m paper_memory serve
 ## 🛠️ バックエンドCLI (手動操作・データ管理)
 
 ```powershell
-python -m paper_memory extract "pdf/paper.pdf" [--analyze-tables] # PDFからテキスト・画像を抽出
+python -m paper_memory extract "pdf/paper.pdf" [--analyze-tables] [--no-footnotes] # PDFからテキスト・画像を抽出（自動で脚注化、--no-footnotesで無効化）
 python -m paper_memory add --file scratch/notes.json [--cleanup]   # JSONファイルからノート追加
 python -m paper_memory search --query "検索クエリ" [--n 10] [--threshold 0.45] [--expand-paper]
 python -m paper_memory list [--paper "論文名"] [--type "タイプ"] # ノート一覧表示
