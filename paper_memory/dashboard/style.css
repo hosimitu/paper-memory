@@ -2082,6 +2082,17 @@ body.light-mode .doi-external-link {
     color: var(--accent);
 }
 
+.graph-action-btn.active {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+}
+
+.graph-action-btn.active:hover {
+    opacity: 0.9;
+    color: #ffffff;
+}
+
 #btn-graph-back-global {
     background: var(--accent);
     color: #ffffff;
