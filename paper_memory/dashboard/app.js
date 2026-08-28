@@ -1625,6 +1625,9 @@ class App {
         const paperSelect = document.getElementById('graph-paper-select');
         const searchInput = document.getElementById('graph-search-input');
         const resetBtn = document.getElementById('btn-graph-reset-view');
+        const relayoutBtn = document.getElementById('btn-graph-relayout');
+        const orphansToggleBtn = document.getElementById('btn-graph-orphans-toggle');
+        const orphansToggleText = document.getElementById('btn-graph-orphans-text');
         const statNodes = document.getElementById('graph-stat-nodes');
         const statEdges = document.getElementById('graph-stat-edges');
         const legendItems = document.getElementById('graph-legend-items');
@@ -1673,8 +1676,18 @@ class App {
         // Cytoscape 要素の作成
         const isDarkMode = !document.body.classList.contains('light-mode');
         const textColor = isDarkMode ? '#e2e8f0' : '#334155';
-        const edgeColor = isDarkMode ? 'rgba(148, 163, 184, 0.25)' : 'rgba(148, 163, 184, 0.4)';
+        const edgeColor = isDarkMode ? 'rgba(148, 163, 184, 0.25)' : 'rgba(148, 163, 184, 0.35)';
         const accentColor = '#6366f1';
+
+        // ローカルストレージに保存された座標キャッシュを確認
+        const POS_STORAGE_KEY = 'paper_memory_graph_positions';
+        let savedPositions = null;
+        try {
+            const raw = localStorage.getItem(POS_STORAGE_KEY);
+            if (raw) savedPositions = JSON.parse(raw);
+        } catch (e) {
+            savedPositions = null;
+        }
 
         const elements = [
             ...nodes.map(n => {
@@ -1686,7 +1699,7 @@ class App {
                 }
                 const labelText = contentText.length > 20 ? contentText.slice(0, 20) + '...' : contentText;
 
-                return {
+                const nodeDef = {
                     group: 'nodes',
                     data: {
                         id: n.id,
@@ -1700,9 +1713,15 @@ class App {
                         tags: n.tags || [],
                         linkCount: n.link_count || 0,
                         color: TYPE_HEX_COLORS[n.element_type] || '#94a3b8',
-                        size: Math.min(22 + (n.link_count || 0) * 4, 52)
+                        size: Math.min(18 + (n.link_count || 0) * 3, 44)
                     }
                 };
+
+                if (savedPositions && savedPositions[n.id]) {
+                    nodeDef.position = { x: savedPositions[n.id].x, y: savedPositions[n.id].y };
+                }
+
+                return nodeDef;
             }),
             ...edges.map((e, idx) => ({
                 group: 'edges',
@@ -1715,11 +1734,17 @@ class App {
             }))
         ];
 
-// 標準内蔵の力指向 (cose) レイアウトを使用
+        // 座標キャッシュが存在し、すべてのノードの座標が揃っていれば preset レイアウトを使用
+        const hasAllPositions = savedPositions && nodes.every(n => savedPositions[n.id]);
+        const initialLayoutName = hasAllPositions ? 'preset' : 'cose';
 
         const cy = cytoscape({
             container: cyContainer,
             elements: elements,
+            boxSelectionEnabled: false,
+            textureOnViewport: true,
+            hideEdgesOnViewport: true,
+            pixelRatio: 'auto',
             style: [
                 {
                     selector: 'node',
@@ -1727,29 +1752,33 @@ class App {
                         'background-color': 'data(color)',
                         'width': 'data(size)',
                         'height': 'data(size)',
-                        'label': 'data(label)',
+                        'border-width': 1.5,
+                        'border-color': isDarkMode ? '#1e293b' : '#ffffff',
+                        'cursor': 'pointer',
+                        'label': '', // デフォルト（ズームアウト時）はラベル描画なしで超軽量
                         'color': textColor,
                         'font-size': '10px',
                         'font-family': 'Inter, "Noto Sans JP", sans-serif',
                         'text-valign': 'bottom',
                         'text-margin-y': 4,
-                        'text-max-width': '100px',
-                        'text-wrap': 'ellipsis',
-                        'border-width': 2,
-                        'border-color': isDarkMode ? '#1e293b' : '#ffffff',
-                        'transition-property': 'background-color, border-color, border-width, opacity, width, height',
-                        'transition-duration': '0.2s',
-                        'cursor': 'pointer'
+                        'text-max-width': '90px',
+                        'text-wrap': 'ellipsis'
+                    }
+                },
+                {
+                    selector: 'node.show-label, node:selected, node.highlighted',
+                    style: {
+                        'label': 'data(label)'
                     }
                 },
                 {
                     selector: 'node:selected',
                     style: {
                         'border-color': accentColor,
-                        'border-width': 4,
-                        'shadow-blur': 12,
+                        'border-width': 3.5,
+                        'shadow-blur': 10,
                         'shadow-color': accentColor,
-                        'shadow-opacity': 0.8
+                        'shadow-opacity': 0.7
                     }
                 },
                 {
@@ -1764,7 +1793,7 @@ class App {
                 {
                     selector: 'node.dimmed',
                     style: {
-                        'opacity': 0.12
+                        'opacity': 0.1
                     }
                 },
                 {
@@ -1776,15 +1805,11 @@ class App {
                 {
                     selector: 'edge',
                     style: {
-                        'width': 1.5,
+                        'width': 1.2,
                         'line-color': edgeColor,
-                        'curve-style': 'bezier',
-                        'target-arrow-shape': 'triangle',
-                        'target-arrow-color': edgeColor,
-                        'arrow-scale': 0.8,
-                        'opacity': 0.7,
-                        'transition-property': 'line-color, target-arrow-color, width, opacity',
-                        'transition-duration': '0.2s'
+                        'curve-style': 'straight', // 直線描画で描画速度を最大化
+                        'target-arrow-shape': 'none', // 全体表示時は矢印なしで軽量化
+                        'opacity': 0.6
                     }
                 },
                 {
@@ -1792,7 +1817,8 @@ class App {
                     style: {
                         'line-color': accentColor,
                         'target-arrow-color': accentColor,
-                        'width': 2.5,
+                        'target-arrow-shape': 'triangle',
+                        'width': 2.2,
                         'opacity': 1,
                         'z-index': 90
                     }
@@ -1800,7 +1826,7 @@ class App {
                 {
                     selector: 'edge.dimmed',
                     style: {
-                        'opacity': 0.05
+                        'opacity': 0.04
                     }
                 },
                 {
@@ -1810,29 +1836,62 @@ class App {
                     }
                 }
             ],
-            layout: {
+            layout: initialLayoutName === 'preset' ? {
+                name: 'preset',
+                fit: true,
+                padding: 40
+            } : {
                 name: 'cose',
-                animate: true,
-                animationDuration: 800,
+                animate: false, // 初回シミュレーションのアニメーションをオフにして一括高速計算
                 fit: true,
                 padding: 40,
-                randomize: false,
-                nodeRepulsion: function(node) { return 500000; },
-                nodeOverlap: 20,
-                idealEdgeLength: function(edge) { return 110; },
-                edgeElasticity: function(edge) { return 100; },
-                nestingFactor: 5,
-                gravity: 80,
-                numIter: 1000,
-                initialTemp: 200,
-                coolingFactor: 0.95,
-                minTemp: 1.0
+                randomize: true,
+                nodeRepulsion: function() { return 400000; },
+                idealEdgeLength: function() { return 100; },
+                gravity: 70,
+                numIter: 400
             }
         });
 
         this.cy = cy;
         let isLocalMode = false;
         let selectedNodeId = null;
+        let hideOrphans = false;
+
+        // ノードの現在座標を localStorage に保存する関数
+        const savePositionsToStorage = () => {
+            try {
+                const posMap = {};
+                cy.nodes().forEach(n => {
+                    posMap[n.id()] = n.position();
+                });
+                localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(posMap));
+            } catch (e) {
+                console.warn('Failed to save node positions:', e);
+            }
+        };
+
+        // 初回 cose 計算完了時またはドラッグ終了時に自動保存
+        if (initialLayoutName === 'cose') {
+            cy.one('layoutstop', () => {
+                savePositionsToStorage();
+            });
+        }
+        cy.on('dragfree', 'node', () => {
+            savePositionsToStorage();
+        });
+
+        // ズームレベル連動のラベル表示制御（Obsidianスタイル）
+        const updateZoomLabels = () => {
+            if (isLocalMode) return;
+            const currentZoom = cy.zoom();
+            if (currentZoom >= 1.2) {
+                cy.nodes().addClass('show-label');
+            } else {
+                cy.nodes().removeClass('show-label');
+            }
+        };
+        cy.on('zoom', updateZoomLabels);
 
         // ツールチップ関数
         const showTooltip = (node, renderedPos) => {
@@ -1889,7 +1948,7 @@ class App {
 
             const neighborhood = node.closedNeighborhood();
             cy.elements().addClass('hidden');
-            neighborhood.removeClass('hidden');
+            neighborhood.removeClass('hidden').addClass('show-label');
 
             // 統計更新
             statNodes.textContent = neighborhood.nodes().length;
@@ -1898,13 +1957,13 @@ class App {
             cy.layout({
                 name: 'cose',
                 animate: true,
-                animationDuration: 600,
+                animationDuration: 500,
                 fit: true,
                 padding: 50,
-                randomize: false,
-                nodeRepulsion: function(node) { return 600000; },
-                idealEdgeLength: function(edge) { return 140; },
-                gravity: 60
+                nodeRepulsion: function() { return 500000; },
+                idealEdgeLength: function() { return 130; },
+                gravity: 50,
+                numIter: 300
             }).run();
         };
 
@@ -1915,19 +1974,19 @@ class App {
             localBadge.style.display = 'none';
 
             cy.elements().removeClass('hidden dimmed highlighted');
+            updateZoomLabels();
             applyFilters();
 
-            cy.layout({
-                name: 'cose',
-                animate: true,
-                animationDuration: 800,
-                fit: true,
-                padding: 40,
-                randomize: false,
-                nodeRepulsion: function(node) { return 500000; },
-                idealEdgeLength: function(edge) { return 110; },
-                gravity: 80
-            }).run();
+            // 保存された座標があれば preset で一瞬で復帰
+            if (savedPositions) {
+                cy.layout({
+                    name: 'preset',
+                    fit: true,
+                    padding: 40
+                }).run();
+            } else {
+                cy.fit(null, 40);
+            }
         };
 
         // フィルター適用処理
@@ -1939,6 +1998,10 @@ class App {
             let visibleNodes = cy.nodes();
 
             cy.elements().removeClass('hidden dimmed');
+
+            if (hideOrphans) {
+                visibleNodes = visibleNodes.filter('[linkCount > 0]');
+            }
 
             if (selectedType) {
                 visibleNodes = visibleNodes.filter(`[elementType = "${selectedType}"]`);
@@ -2025,10 +2088,47 @@ class App {
         typeSelect.onchange = () => applyFilters();
         paperSelect.onchange = () => applyFilters();
         searchInput.oninput = () => applyFilters();
+
+        // 孤立ノード切り替え
+        orphansToggleBtn.onclick = () => {
+            hideOrphans = !hideOrphans;
+            orphansToggleBtn.classList.toggle('active', hideOrphans);
+            orphansToggleText.innerText = hideOrphans ? i18n.t('graph.show_all_nodes') : i18n.t('graph.hide_orphans');
+            applyFilters();
+        };
+
+        // 再配置（物理シミュレーションを再実行して保存）
+        relayoutBtn.onclick = () => {
+            if (isLocalMode) exitLocalMode();
+            cy.elements().removeClass('hidden dimmed highlighted');
+            applyFilters();
+
+            const coseLayout = cy.layout({
+                name: 'cose',
+                animate: true,
+                animationDuration: 800,
+                fit: true,
+                padding: 40,
+                randomize: true,
+                nodeRepulsion: function() { return 450000; },
+                idealEdgeLength: function() { return 110; },
+                gravity: 70,
+                numIter: 400
+            });
+            coseLayout.one('layoutstop', () => {
+                savePositionsToStorage();
+            });
+            coseLayout.run();
+        };
+
         resetBtn.onclick = () => {
             typeSelect.value = '';
             paperSelect.value = '';
             searchInput.value = '';
+            hideOrphans = false;
+            orphansToggleBtn.classList.remove('active');
+            orphansToggleText.innerText = i18n.t('graph.hide_orphans');
+
             if (isLocalMode) {
                 exitLocalMode();
             } else {
@@ -2036,6 +2136,7 @@ class App {
                 statNodes.textContent = nodes.length;
                 statEdges.textContent = edges.length;
                 cy.fit(null, 40);
+                updateZoomLabels();
             }
         };
 
@@ -2055,6 +2156,7 @@ class App {
 
         lucide.createIcons();
     }
+
 
     onLanguageChange() {
         this.switchView(this.currentView, this.currentParams, false);

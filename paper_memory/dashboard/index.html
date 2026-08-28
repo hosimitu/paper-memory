@@ -11,7 +11,7 @@
     <!-- Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body class="light-mode">
     <div class="app-container">
@@ -296,6 +296,14 @@
                         <i data-lucide="search" class="graph-search-icon"></i>
                         <input type="text" id="graph-search-input" class="graph-search-input" placeholder="Search nodes...">
                     </div>
+                    <button id="btn-graph-orphans-toggle" class="graph-action-btn" title="Toggle Orphan Nodes">
+                        <i data-lucide="filter"></i>
+                        <span id="btn-graph-orphans-text" data-i18n="graph.hide_orphans">リンクありのみ</span>
+                    </button>
+                    <button id="btn-graph-relayout" class="graph-action-btn" title="Re-calculate Physics Layout">
+                        <i data-lucide="sparkles"></i>
+                        <span data-i18n="graph.relayout">再配置</span>
+                    </button>
                     <button id="btn-graph-reset-view" class="graph-action-btn" title="Reset View">
                         <i data-lucide="rotate-ccw"></i>
                         <span data-i18n="graph.reset_zoom">リセット</span>
@@ -363,9 +371,9 @@
         </div>
     </template>
 
-    <script src="i18n.js?v=3"></script>
+    <script src="i18n.js?v=4"></script>
     <!-- Cytoscape.js (標準で強力な力指向 cose レイアウトを内蔵) -->
     <script src="https://unpkg.com/cytoscape@3.34.1/dist/cytoscape.min.js"></script>
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=9"></script>
 </body>
 </html>
