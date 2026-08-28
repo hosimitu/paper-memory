@@ -30,6 +30,7 @@ from .analyzer import clean_paper_name
 from .ai_models import QA_MODEL
 from .config import DEFAULT_LANGUAGE, QA_OUTPUT_DIR
 from .qa_formats import get_format, list_formats
+from .summary_generator import SUMMARY_FILENAME, generate_summary
 import datetime
 import email.utils
 import re
@@ -84,7 +85,7 @@ def get_markdown_path(
                 if d.is_dir():
                     alphanum_dir = re.sub(r"[^a-zA-Z0-9]", "", d.name).lower()
                     if search_term in alphanum_dir:
-                        md_files = list(d.glob("*.md"))
+                        md_files = [f for f in d.glob("*.md") if f.name != SUMMARY_FILENAME]
                         if md_files:
                             return md_files[0].resolve()
 
@@ -403,6 +404,13 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         p["markdown_url"] = (
                             f"/extracted/{md_path.parent.name}/{md_path.name}"
                             if md_path and md_path.exists()
+                            else None
+                        )
+                        summary_path = md_path.parent / SUMMARY_FILENAME if md_path else None
+                        p["has_summary"] = bool(summary_path and summary_path.is_file())
+                        p["summary_url"] = (
+                            f"/extracted/{summary_path.parent.name}/{summary_path.name}"
+                            if summary_path and summary_path.is_file()
                             else None
                         )
 
@@ -1240,6 +1248,39 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         else:
                             status_code = 404
                             data = {"error": "Paper or PDF path not found"}
+                else:
+                    status_code = 400
+                    data = {"error": "Invalid path"}
+
+            elif path.startswith("/api/papers/") and path.endswith("/summary"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4:
+                    try:
+                        paper_id = int(parts[2])
+                    except ValueError:
+                        status_code = 400
+                        data = {"error": "Invalid paper ID"}
+                    else:
+                        with store.db.get_connection() as conn:
+                            row = conn.execute(
+                                "SELECT id, title, authors, year, doi, journal, pdf_path FROM papers WHERE id = ?",
+                                (paper_id,),
+                            ).fetchone()
+                        if not row:
+                            status_code = 404
+                            data = {"error": "Paper not found"}
+                        else:
+                            paper = dict(row)
+                            try:
+                                result = generate_summary(Path(__file__).parent.parent, paper)
+                                data = {
+                                    "status": "success",
+                                    "summary_url": result["summary_url"],
+                                    "existing": result.get("existing", False),
+                                }
+                            except FileNotFoundError as e:
+                                status_code = 404
+                                data = {"error": str(e)}
                 else:
                     status_code = 400
                     data = {"error": "Invalid path"}

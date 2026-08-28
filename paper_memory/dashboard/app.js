@@ -553,6 +553,9 @@ class App {
             if (paper.has_markdown && paper.id) {
                 mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
             }
+            const summaryAction = paper.has_summary
+                ? `<a href="${paper.summary_url}" target="_blank" rel="noopener noreferrer" class="paper-summary-link">summary</a>`
+                : `<button class="action-btn generate-summary-btn" data-id="${paper.id}">summary</button>`;
             const thumbnailHtml = paper.thumbnail_url
                 ? `<div class="paper-thumbnail"><img src="${paper.thumbnail_url}" alt="Thumbnail"></div>`
                 : `<div class="paper-thumbnail"><i data-lucide="image" style="width:32px;height:32px;opacity:0.3;"></i></div>`;
@@ -567,7 +570,7 @@ class App {
                     <div class="paper-meta">
                         <p>${i18n.t('modal.authors') || 'Authors'}: ${getAuthorsList(paper.authors).join(', ')}</p>
                         <p>${i18n.t('ref.year')}: ${paper.year || i18n.t('status.unknown')}</p>
-                        <p>DOI: ${doiLink}${mdLink}</p>
+                    <p>DOI: ${doiLink}${mdLink} <span style="margin: 0 8px;">|</span> ${summaryAction}</p>
                     </div>
                 </div>
                 <div class="paper-actions" style="position: absolute; top: 12px; right: 12px;">
@@ -625,6 +628,29 @@ class App {
                     } catch (err) {
                         alert(i18n.t('error.alert', { message: err.message }));
                     }
+                }
+            };
+        });
+
+        list.querySelectorAll('.generate-summary-btn').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const paperId = btn.getAttribute('data-id');
+                btn.disabled = true;
+                btn.textContent = '生成中...';
+                try {
+                    const res = await fetch(`${API_BASE}/papers/${paperId}/summary`, { method: 'POST' });
+                    const data = await res.json();
+                    if (!res.ok || data.status !== 'success') {
+                        throw new Error(data.error || 'summary の生成に失敗しました');
+                    }
+                    // /papers はクライアント側にキャッシュされるため、生成結果を反映する前に破棄する
+                    delete this.cache['/papers'];
+                    await this.renderPapers();
+                } catch (err) {
+                    btn.disabled = false;
+                    btn.textContent = 'summary';
+                    alert(err.message);
                 }
             };
         });
