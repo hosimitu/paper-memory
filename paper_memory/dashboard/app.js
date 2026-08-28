@@ -554,8 +554,8 @@ class App {
                 mdLink = ` <span style="margin: 0 8px;">|</span> <a href="${paper.markdown_url}" target="_blank" style="color:var(--accent); text-decoration:underline;">📄 Markdownを開く</a>`;
             }
             const summaryAction = paper.has_summary
-                ? `<a href="${paper.summary_url}" target="_blank" rel="noopener noreferrer" class="paper-summary-link">summary</a>`
-                : `<button class="action-btn generate-summary-btn" data-id="${paper.id}">summary</button>`;
+                ? `<a href="${paper.summary_url}" target="_blank" rel="noopener noreferrer" class="paper-summary-link">📄 Summaryを開く</a>`
+                : `<button class="action-btn generate-summary-btn" data-id="${paper.id}">Summary 生成</button>`;
             const thumbnailHtml = paper.thumbnail_url
                 ? `<div class="paper-thumbnail"><img src="${paper.thumbnail_url}" alt="Thumbnail"></div>`
                 : `<div class="paper-thumbnail"><i data-lucide="image" style="width:32px;height:32px;opacity:0.3;"></i></div>`;
@@ -649,7 +649,7 @@ class App {
                     await this.renderPapers();
                 } catch (err) {
                     btn.disabled = false;
-                    btn.textContent = 'summary';
+                    btn.textContent = 'summary 生成';
                     alert(err.message);
                 }
             };
@@ -1455,7 +1455,7 @@ class App {
                         } catch (parseErr) {
                             // JSONパース失敗は無視
                         }
-                        
+
                         if (payload) {
                             if (currentEvent === 'progress') {
                                 renderProgress(payload.step);
@@ -1872,8 +1872,8 @@ class App {
                 fit: true,
                 padding: 40,
                 randomize: true,
-                nodeRepulsion: function() { return 400000; },
-                idealEdgeLength: function() { return 100; },
+                nodeRepulsion: function () { return 400000; },
+                idealEdgeLength: function () { return 100; },
                 gravity: 70,
                 numIter: 400
             }
@@ -1986,8 +1986,8 @@ class App {
                 animationDuration: 500,
                 fit: true,
                 padding: 50,
-                nodeRepulsion: function() { return 500000; },
-                idealEdgeLength: function() { return 130; },
+                nodeRepulsion: function () { return 500000; },
+                idealEdgeLength: function () { return 130; },
                 gravity: 50,
                 numIter: 300
             }).run();
@@ -2136,8 +2136,8 @@ class App {
                 fit: true,
                 padding: 40,
                 randomize: true,
-                nodeRepulsion: function() { return 450000; },
-                idealEdgeLength: function() { return 110; },
+                nodeRepulsion: function () { return 450000; },
+                idealEdgeLength: function () { return 110; },
                 gravity: 70,
                 numIter: 400
             });
