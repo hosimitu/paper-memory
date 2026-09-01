@@ -30,7 +30,10 @@ EMBEDDING_MODEL = "models/gemini-embedding-2"
 
 # ダッシュボードのQA機能で回答を生成するために使用するモデル
 # [使用箇所] paper_memory/server.py
-QA_MODEL = "gemini-3.5-flash-lite"
+QA_MODEL = "gemini-3.5-flash"
+
+# 登録論文の summary Markdown 生成に使用するモデル
+SUMMARY_MODEL = "gemini-3.7-flash"
 
 # 検索クエリ補正に使用するモデル(例：gemma-4-26b-a4b-it)
 # [使用箇所] paper_memory/store.py
