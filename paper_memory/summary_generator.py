@@ -331,7 +331,7 @@ title: {_yaml_quote("📜 " + title)}
 authors: {_yaml_quote(", ".join(authors))}
 journal: {_yaml_quote(journal or str(year))}
 tags:
-{"".join(f"  - {_yaml_tag_value(str(t))}\n" for t in tags if t)}doi: {_yaml_quote(doi)}
+{"".join(f"  - {_yaml_tag_value(str(t))}\n" for t in tags if t)}doi: {doi}
 cssclass: ronbun
 UID: {now.strftime("%Y%m%d-%H%M%S")}
 date: {now.strftime("%Y-%m-%d")}
