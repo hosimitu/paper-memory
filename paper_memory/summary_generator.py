@@ -26,6 +26,13 @@ def _yaml_quote(value: str) -> str:
     return '"' + str(value or "").replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _yaml_tag_value(value: str) -> str:
+    val_str = str(value or "").strip()
+    if ":" in val_str or "#" in val_str:
+        return _yaml_quote(val_str)
+    return val_str
+
+
 def _authors(value) -> list[str]:
     if isinstance(value, list):
         return [str(v) for v in value]
@@ -42,6 +49,144 @@ def _doi_url(doi: str) -> str:
     if not doi:
         return ""
     return doi if str(doi).startswith("http") else f"https://doi.org/{doi}"
+
+
+def _format_reason(reason_val) -> str:
+    if not reason_val:
+        return ""
+    if isinstance(reason_val, dict):
+        return (
+            reason_val.get("ja")
+            or reason_val.get("local")
+            or reason_val.get("en")
+            or next(iter(reason_val.values()), "")
+        )
+    if isinstance(reason_val, str):
+        cleaned = reason_val.strip()
+        if cleaned.startswith(("{", "[")):
+            try:
+                parsed = json.loads(cleaned)
+                if isinstance(parsed, dict):
+                    return (
+                        parsed.get("ja")
+                        or parsed.get("local")
+                        or parsed.get("en")
+                        or next(iter(parsed.values()), "")
+                    )
+            except Exception:
+                pass
+        return reason_val
+    return str(reason_val)
+
+
+def _format_relevance_badge(relevance: str) -> str:
+    rel = (relevance or "").lower()
+    if rel == "high":
+        return "🔴 high"
+    elif rel == "medium":
+        return "🟡 medium"
+    elif rel == "low":
+        return "⚪ low"
+    return f"⚪ {relevance or 'unspecified'}"
+
+
+def _fetch_references_for_paper(project_root: Path, paper: dict) -> list[dict]:
+    db_path = project_root / "paper_memory.db"
+    if not db_path.exists():
+        return []
+
+    title = (paper.get("title") or "").strip()
+    pdf_path = (paper.get("pdf_path") or "").strip()
+    if not title and not pdf_path:
+        return []
+
+    query = """
+    SELECT id, title, authors, year, doi, journal, cited_by, cited_by_pdf, relevance, reason, keywords
+    FROM references_table
+    WHERE (cited_by != '' AND LOWER(cited_by) = LOWER(?))
+       OR (cited_by_pdf != '' AND LOWER(cited_by_pdf) = LOWER(?))
+    ORDER BY 
+        CASE LOWER(relevance)
+            WHEN 'high' THEN 1
+            WHEN 'medium' THEN 2
+            WHEN 'low' THEN 3
+            ELSE 4
+        END,
+        created_at ASC
+    """
+    try:
+        import sqlite3
+
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(query, (title, pdf_path)).fetchall()
+
+            if not rows and (title or pdf_path):
+                alt_query = """
+                SELECT id, title, authors, year, doi, journal, cited_by, cited_by_pdf, relevance, reason, keywords
+                FROM references_table
+                WHERE (? != '' AND LOWER(cited_by) LIKE '%' || LOWER(?) || '%')
+                   OR (? != '' AND LOWER(cited_by_pdf) LIKE '%' || LOWER(?) || '%')
+                ORDER BY 
+                    CASE LOWER(relevance)
+                        WHEN 'high' THEN 1
+                        WHEN 'medium' THEN 2
+                        WHEN 'low' THEN 3
+                        ELSE 4
+                    END,
+                    created_at ASC
+                """
+                pdf_name = Path(pdf_path).name if pdf_path else ""
+                rows = conn.execute(
+                    alt_query, (title, title, pdf_name, pdf_name)
+                ).fetchall()
+
+            return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def _build_next_papers_section(
+    references: list[dict], generated_next_papers: str = ""
+) -> str:
+    if not references:
+        return generated_next_papers or "（該当する文献なし）"
+
+    lines = []
+    for ref in references:
+        title = ref.get("title") or "無題"
+        doi = ref.get("doi") or ""
+        doi_url = _doi_url(doi) if doi else ""
+        title_part = f"[{title}]({doi_url})" if doi_url else title
+
+        authors = _authors(ref.get("authors"))
+        if len(authors) > 1:
+            author_str = f"{authors[0]} et al."
+        elif authors:
+            author_str = authors[0]
+        else:
+            author_str = "著者不明"
+
+        year_str = str(ref.get("year") or "")
+        meta_str = f" ({author_str}, {year_str})" if year_str else f" ({author_str})"
+
+        relevance_badge = _format_relevance_badge(ref.get("relevance", ""))
+        reason = _format_reason(ref.get("reason"))
+
+        lines.append(f"- **{title_part}**{meta_str}")
+        lines.append(f"  - **重要度**: {relevance_badge}")
+        if reason:
+            lines.append(f"  - **選定理由 / 補足**: {reason}")
+        else:
+            lines.append("  - **選定理由 / 補足**: （本文中での重要参照文献）")
+
+    gen_text = (generated_next_papers or "").strip()
+    if gen_text and gen_text != "（該当する文献なし）":
+        lines.append("")
+        lines.append("### 💡 AIによる補足・今後の読書方針")
+        lines.append(gen_text)
+
+    return "\n".join(lines)
 
 
 def _source_markdown_path(project_root: Path, pdf_path: str, title: str) -> Path | None:
@@ -186,7 +331,7 @@ title: {_yaml_quote("📜 " + title)}
 authors: {_yaml_quote(", ".join(authors))}
 journal: {_yaml_quote(journal or str(year))}
 tags:
-{"".join(f"  - {_yaml_quote(str(t))}\n" for t in tags if t)}doi: {_yaml_quote(doi)}
+{"".join(f"  - {_yaml_tag_value(str(t))}\n" for t in tags if t)}doi: {_yaml_quote(doi)}
 cssclass: ronbun
 UID: {now.strftime("%Y%m%d-%H%M%S")}
 date: {now.strftime("%Y-%m-%d")}
@@ -236,6 +381,31 @@ def generate_summary(
         f"1 GPU = {convert(1, 'gpu'):.4e} mol/m2skPa; "
         f"1 Barrer = {convert(1, 'barrer'):.4e} molm/m2skPa"
     )
+    references = _fetch_references_for_paper(project_root, paper)
+    db_refs_section = ""
+    if references:
+        ref_items = []
+        for r in references:
+            r_title = r.get("title", "")
+            r_authors = ", ".join(_authors(r.get("authors")))
+            r_year = r.get("year") or ""
+            r_doi = r.get("doi") or ""
+            r_rel = r.get("relevance") or "medium"
+            r_reason = _format_reason(r.get("reason"))
+            ref_items.append(
+                f"- タイトル: {r_title}\n"
+                f"  著者: {r_authors}\n"
+                f"  年: {r_year}\n"
+                f"  DOI: {r_doi}\n"
+                f"  重要度: {r_rel}\n"
+                f"  選定理由: {r_reason}"
+            )
+        db_refs_section = (
+            "\nDATABASE REFERENCES (Reading List for this paper):\n"
+            + "\n".join(ref_items)
+            + "\nFor 'next_papers', reference the above database references and provide concise Japanese commentary on key reading points and their relation to this paper. If no database references are provided, extract candidate recommendations from the markdown text.\n"
+        )
+
     authors = _authors(paper.get("authors"))
     language = get_language_name(DEFAULT_LANGUAGE)
     prompt = f"""You are a CO2 separation membrane researcher. Analyze the extracted paper Markdown below and produce JSON only.
@@ -252,7 +422,7 @@ Template reference:
 {template_text[:12000]}
 Translation dictionary:
 {dictionary_text}
-
+{db_refs_section}
 EXTRACTED MARKDOWN:
 {source_text[:200000]}
 """
@@ -262,6 +432,10 @@ EXTRACTED MARKDOWN:
     generated = _extract_json(response.text)
     if not generated:
         raise ValueError("AI の summary 応答を JSON として解釈できませんでした")
+    if not generated.get("is_review"):
+        generated["next_papers"] = _build_next_papers_section(
+            references, generated.get("next_papers", "")
+        )
     meta = {
         "title": generated.get("title") or paper.get("title"),
         "authors": generated.get("authors") or paper.get("authors"),
