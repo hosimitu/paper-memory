@@ -1349,22 +1349,25 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
 
             traceback.print_exc()
 
-            # 429 Too Many Requests の判定
+            # 429 Too Many Requests / 503 Service Unavailable の判定
             try:
                 from google.genai import errors as genai_errors
 
                 if (
                     isinstance(e, genai_errors.APIError)
                     and getattr(e, "code", None) == 429
-                ):
+                ) or "429" in str(e) or "quota" in str(e).lower():
                     status_code = 429
                     data = {
                         "error": "AIへのリクエスト制限（Rate Limit）に達しました。しばらく待ってから再度お試しください。"
                     }
-                elif "429" in str(e) or "quota" in str(e).lower():
-                    status_code = 429
+                elif (
+                    isinstance(e, genai_errors.APIError)
+                    and getattr(e, "code", None) == 503
+                ) or "503" in str(e) or "unavailable" in str(e).lower() or "high demand" in str(e).lower() or "overloaded" in str(e).lower():
+                    status_code = 503
                     data = {
-                        "error": "AIへのリクエスト制限（Rate Limit）に達しました。しばらく待ってから再度お試しください。"
+                        "error": "AIモデルが一時的に過負荷（高需要）となっています。少し時間をおいてから再度お試しください。"
                     }
                 else:
                     status_code = 500
