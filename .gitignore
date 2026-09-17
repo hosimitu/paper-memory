@@ -60,6 +60,7 @@ extracted/
 output/
 plan.md
 qa_outputs/
+PROJECT_MAP.md
 
 # --- エディタ・OS ---
 .vscode/
@@ -75,3 +76,4 @@ Thumbs.db
 .agents/rules/
 .agents/workflows/
 .agents/scratch/
+.agents/skills/
