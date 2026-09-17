@@ -146,11 +146,36 @@ def _fetch_references_for_paper(project_root: Path, paper: dict) -> list[dict]:
         return []
 
 
-def _build_next_papers_section(
-    references: list[dict], generated_next_papers: str = ""
-) -> str:
+def _normalize_next_papers(value) -> str:
+    """Normalize the LLM's next_papers value to Markdown text.
+
+    The prompt asks for Markdown text, but models may return a JSON array or
+    object for this semantically list-like field. Keep the renderer tolerant
+    of those valid JSON shapes instead of allowing a type error to abort the
+    whole summary generation.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        items = []
+        for item in value:
+            if isinstance(item, (dict, list)):
+                item = json.dumps(item, ensure_ascii=False)
+            text = str(item).strip()
+            if text:
+                items.append(text if text.startswith("-") else f"- {text}")
+        return "\n".join(items)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value).strip()
+
+
+def _build_next_papers_section(references: list[dict], generated_next_papers="") -> str:
+    generated_text = _normalize_next_papers(generated_next_papers)
     if not references:
-        return generated_next_papers or "（該当する文献なし）"
+        return generated_text or "（該当する文献なし）"
 
     lines = []
     for ref in references:
@@ -180,7 +205,7 @@ def _build_next_papers_section(
         else:
             lines.append("  - **選定理由 / 補足**: （本文中での重要参照文献）")
 
-    gen_text = (generated_next_papers or "").strip()
+    gen_text = generated_text
     if gen_text and gen_text != "（該当する文献なし）":
         lines.append("")
         lines.append("### 💡 AIによる補足・今後の読書方針")
@@ -262,7 +287,7 @@ def _render_template(
 ## 📰文献の Markdown
 {markdown_link}
         
-## 🇯🇵このレビューの要点
+## 🗾このレビューの要点
 {generated.get("key_points", "（生成結果なし）")}
 
 ## 📝レビューの範囲と目的
@@ -283,7 +308,7 @@ def _render_template(
 ## 📌abstracts
 {generated.get("abstract_original", "（本文から抽出できませんでした）")}
 
-## 🇯🇵abstracts の日本語訳
+## 🗾abstracts の日本語訳
 {generated.get("abstract_translation", "（生成結果なし）")}
 """
     else:
@@ -292,7 +317,7 @@ def _render_template(
 ## 📰文献の Markdown
 {markdown_link}
 
-## 🇯🇵abstracts の日本語訳
+## 🗾abstracts の日本語訳
 {generated.get("abstract_translation", "（生成結果なし）")}
 
 ## 💬コメント
@@ -306,10 +331,10 @@ def _render_template(
 ## 👓技術や手法のキモはどこ？
 {generated.get("key_method", "（生成結果なし）")}
 
-## ⚗どうやって有効だと検証した？
+## 🧪どうやって有効だと検証した？
 {generated.get("validation", "（生成結果なし）")}
 
-## 🗯議論はある？課題はある？
+## 💭議論はある？課題はある？
 {generated.get("discussion_limitations", "（生成結果なし）")}
 
 ## 🔜次に読むべき論文は？
@@ -415,7 +440,7 @@ Conversion rules (calculated with the bundled convert_units utility): {conversio
 Return keys: is_review, title, authors, year, journal, doi, abstract_original, abstract_translation, tags,
 what_is_it, novelty, key_method, validation, discussion_limitations, next_papers,
 key_points, scope_purpose, topics, future_challenges.
-For list-like sections, return Markdown text. The default language is {language}.
+Every field must use the requested JSON type. In particular, `next_papers` must always be a single JSON string containing Markdown text, never a JSON array or object; for multiple items, use Markdown bullets inside that string. The default language is {language}.
 Tentative metadata: {json.dumps({"title": paper.get("title"), "authors": authors, "year": paper.get("year"), "journal": paper.get("journal"), "doi": paper.get("doi")}, ensure_ascii=False)}
 Template selected: {template_name}
 Template reference:
@@ -427,7 +452,7 @@ EXTRACTED MARKDOWN:
 {source_text[:200000]}
 """
     response = generate_content_with_retry(
-        model=SUMMARY_MODEL, contents=prompt, max_retries=3
+        model=SUMMARY_MODEL, contents=prompt, max_retries=4
     )
     generated = _extract_json(response.text)
     if not generated:
