@@ -1197,6 +1197,27 @@ body {
     border: 1px solid transparent;
 }
 
+.summary-profile-select {
+    max-width: 190px;
+    margin: 0 6px;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+}
+
+.summary-profile-select:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.summary-profile-select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
 .action-btn i {
     width: 18px;
     height: 18px;

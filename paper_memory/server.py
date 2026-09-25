@@ -30,7 +30,7 @@ from .analyzer import clean_paper_name
 from .ai_models import QA_MODEL
 from .config import DEFAULT_LANGUAGE, QA_OUTPUT_DIR
 from .qa_formats import get_format, list_formats
-from .summary_generator import SUMMARY_FILENAME, generate_summary
+from .summary_generator import SUMMARY_FILENAME, generate_summary, list_summary_profiles
 import datetime
 import email.utils
 import re
@@ -553,6 +553,7 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                 data = {
                     "language": DEFAULT_LANGUAGE,
                     "marker_available": is_marker_available(),
+                    "summary_profiles": list_summary_profiles(),
                 }
             elif path == "/api/qa/formats":
                 data = list_formats()
@@ -1272,14 +1273,23 @@ class PaperMemoryHandler(http.server.BaseHTTPRequestHandler):
                         else:
                             paper = dict(row)
                             try:
-                                result = generate_summary(Path(__file__).parent.parent, paper)
+                                template_id = post_data.get("template_id", "auto")
+                                result = generate_summary(
+                                    Path(__file__).parent.parent,
+                                    paper,
+                                    template_id=template_id,
+                                )
                                 data = {
                                     "status": "success",
                                     "summary_url": result["summary_url"],
                                     "existing": result.get("existing", False),
+                                    "profile_id": result.get("profile_id"),
                                 }
                             except FileNotFoundError as e:
                                 status_code = 404
+                                data = {"error": str(e)}
+                            except ValueError as e:
+                                status_code = 400
                                 data = {"error": str(e)}
                 else:
                     status_code = 400

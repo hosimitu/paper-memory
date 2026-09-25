@@ -1,0 +1,16 @@
+{
+  "id": "research",
+  "label": "通常の研究論文",
+  "kind": "research",
+  "classification": "An original research paper reporting a new experiment, material, process, model, or analysis. Choose this for non-review papers.",
+  "hints": ["original research", "experimental study", "new material", "method development"],
+  "instructions": "Summarize the paper's own contribution. Distinguish prior work from this paper's results. Preserve explicit numeric values with units and experimental conditions. Do not invent claims, references, or DOI.",
+  "sections": [
+    {"key": "what_is_it", "heading": "🤔どんな論文？", "instruction": "State the research question, objective, and central result in a self-contained concise paragraph."},
+    {"key": "novelty", "heading": "💡これまでの論文と何が違うか", "instruction": "Explain the novelty relative to prior work, using only differences supported by the paper."},
+    {"key": "key_method", "heading": "👓技術や手法のキモはどこ？", "instruction": "Describe the essential materials, method, design, or mechanism."},
+    {"key": "validation", "heading": "🧪どうやって有効だと検証した？", "instruction": "Describe validation methods and the key quantitative findings with units and relevant conditions."},
+    {"key": "discussion_limitations", "heading": "💭議論はある？課題はある？", "instruction": "Summarize the authors' interpretation, stated limitations, and unresolved challenges."},
+    {"key": "next_papers", "heading": "🔜次に読むべき論文は？", "instruction": "Give concise Markdown recommendations grounded in references cited by the paper. If none can be identified, say so."}
+  ]
+}

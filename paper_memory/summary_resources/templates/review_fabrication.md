@@ -1,0 +1,28 @@
+# {{title}}
+
+## 📰文献の Markdown
+{{markdown_link}}
+
+{{section:key_points}}
+
+{{section:fabrication_routes}}
+
+{{section:characterization}}
+
+{{section:defects_durability}}
+
+{{section:scale_up}}
+
+{{section:future_challenges}}
+
+## 🎓著者一覧
+{{author_lines}}
+
+## 🏷️タグ
+{{tag_lines}}
+
+## 📌abstracts
+{{abstract_original}}
+
+## 🗾abstracts の日本語訳
+{{abstract_translation}}

@@ -1,0 +1,16 @@
+{
+  "id": "review_material",
+  "label": "レビュー：材料・機構",
+  "kind": "review",
+  "classification": "A review focused on one material or solvent family, its molecular or structural design, transport/reaction mechanism, physicochemical properties, and stability.",
+  "hints": ["ionic liquid", "amino acid", "facilitated transport", "MOF", "adsorbent", "sorbent", "structure-property"],
+  "instructions": "Connect composition and structure to mechanism, physicochemical properties, performance, and durability. Preserve measurement conditions and distinguish review synthesis from isolated literature values.",
+  "sections": [
+    {"key": "key_points", "heading": "🗾このレビューの要点", "instruction": "Summarize the material-level conclusions in 3–6 points."},
+    {"key": "material_classes", "heading": "🧱材料群と設計変数", "instruction": "Classify materials/compositions and identify structural or formulation variables."},
+    {"key": "mechanisms", "heading": "⚙️分離・反応機構", "instruction": "Explain the relevant transport, sorption, absorption, or facilitated transport mechanisms."},
+    {"key": "structure_properties", "heading": "🔗構造・物性・性能の関係", "instruction": "Synthesize how design variables affect properties and performance. Keep metrics, units, and test conditions attached to values."},
+    {"key": "stability_regeneration", "heading": "♻️安定性・再生・安全性", "instruction": "Summarize durability, degradation, regeneration, toxicity, corrosion, or solvent loss when covered."},
+    {"key": "future_challenges", "heading": "🔍課題と今後の材料設計", "instruction": "List author-stated research directions and practical material bottlenecks."}
+  ]
+}

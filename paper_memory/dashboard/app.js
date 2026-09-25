@@ -119,6 +119,7 @@ class App {
         this.currentView = 'overview';
         this.cache = {};
         this.qaHistoryOffset = 0;
+        this.summaryProfiles = [];
         this.paperSortMode = ['title', 'year', 'registration'].includes(localStorage.getItem('paper-sort-mode'))
             ? localStorage.getItem('paper-sort-mode')
             : 'registration';
@@ -152,7 +153,8 @@ class App {
 
     async init() {
         // Load server config first
-        await i18n.loadConfig();
+        const config = await i18n.loadConfig();
+        this.summaryProfiles = Array.isArray(config.summary_profiles) ? config.summary_profiles : [];
 
         // Navigation setup
         this.navItems.forEach(item => {
@@ -555,7 +557,11 @@ class App {
             }
             const summaryAction = paper.has_summary
                 ? `<a href="${paper.summary_url}" target="_blank" rel="noopener noreferrer" class="paper-summary-link">📄 Summaryを開く</a>`
-                : `<button class="action-btn generate-summary-btn" data-id="${paper.id}">Summary 生成</button>`;
+                : `<select class="summary-profile-select" data-id="${paper.id}" title="テンプレートの自動判定。必要なら手動で変更できます。">
+                       <option value="auto">自動判定</option>
+                       ${this.summaryProfiles.map(profile => `<option value="${profile.id}">${profile.label}</option>`).join('')}
+                   </select>
+                   <button class="action-btn generate-summary-btn" data-id="${paper.id}">Summary 生成</button>`;
             const thumbnailHtml = paper.thumbnail_url
                 ? `<div class="paper-thumbnail"><img src="${paper.thumbnail_url}" alt="Thumbnail"></div>`
                 : `<div class="paper-thumbnail"><i data-lucide="image" style="width:32px;height:32px;opacity:0.3;"></i></div>`;
@@ -636,10 +642,16 @@ class App {
             btn.onclick = async (e) => {
                 e.stopPropagation();
                 const paperId = btn.getAttribute('data-id');
+                const profileSelector = list.querySelector(`.summary-profile-select[data-id="${paperId}"]`);
+                const templateId = profileSelector?.value || 'auto';
                 btn.disabled = true;
                 btn.textContent = '生成中...';
                 try {
-                    const res = await fetch(`${API_BASE}/papers/${paperId}/summary`, { method: 'POST' });
+                    const res = await fetch(`${API_BASE}/papers/${paperId}/summary`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ template_id: templateId })
+                    });
                     const data = await res.json();
                     if (!res.ok || data.status !== 'success') {
                         throw new Error(data.error || 'summary の生成に失敗しました');

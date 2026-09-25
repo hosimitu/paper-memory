@@ -1,0 +1,16 @@
+{
+  "id": "review_fabrication",
+  "label": "レビュー：製造・評価",
+  "kind": "review",
+  "classification": "A review focused on membrane fabrication, surface modification, support/interface design, mechanical or structural characterization, or manufacturing scale-up.",
+  "hints": ["fabrication", "surface modification", "nanomembrane", "hollow fiber", "support layer", "mechanical properties"],
+  "instructions": "Relate fabrication choices to resulting structure, defects, measured properties, and scale-up. Distinguish demonstrated results from proposed applications.",
+  "sections": [
+    {"key": "key_points", "heading": "🗾このレビューの要点", "instruction": "Summarize the main fabrication and evaluation conclusions."},
+    {"key": "fabrication_routes", "heading": "🛠️製造・改質ルート", "instruction": "Describe fabrication routes, materials, supports, controllable variables, and resulting structures."},
+    {"key": "characterization", "heading": "🔬構造・性能の評価", "instruction": "Summarize structural, separation, mechanical, thermal, or chemical evaluation methods and conditions."},
+    {"key": "defects_durability", "heading": "🧩欠陥・耐久性・再現性", "instruction": "Describe defects, interface issues, mechanical/chemical durability, and reproducibility evidence."},
+    {"key": "scale_up", "heading": "🏗️スケールアップ", "instruction": "Summarize area, module, continuous-manufacturing, and cost barriers."},
+    {"key": "future_challenges", "heading": "🔍今後の課題", "instruction": "List author-stated next steps and distinguish them from your inference."}
+  ]
+}

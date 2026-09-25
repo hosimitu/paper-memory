@@ -1,0 +1,15 @@
+{
+  "id": "review_process",
+  "label": "レビュー：プロセス・用途",
+  "kind": "review",
+  "classification": "A review centered on a capture or separation application, process configurations, operating requirements, module/system design, energy, or economics.",
+  "hints": ["direct air capture", "post-combustion", "process design", "energy penalty", "techno-economic", "application scenarios"],
+  "instructions": "Organize the synthesis from feed/application requirements through process configuration to product requirements and system performance. Identify whether energy and cost values are experimental, simulated, or estimated.",
+  "sections": [
+    {"key": "key_points", "heading": "🗾このレビューの要点", "instruction": "Summarize the process-level conclusions and main design implications."},
+    {"key": "application_context", "heading": "🏭対象用途と供給条件", "instruction": "Describe the application, feed composition/concentration, flow, pressure, impurities, and product requirements where reported."},
+    {"key": "process_configurations", "heading": "🔄プロセス構成と設計変数", "instruction": "Summarize process stages, flow arrangements, vacuum/compression/sweep/recycle, and important design variables."},
+    {"key": "system_performance", "heading": "⚡エネルギー・コスト・環境評価", "instruction": "Report system-level energy, cost, recovery, purity, and environmental metrics with units, assumptions, and whether they are modeled or measured."},
+    {"key": "future_challenges", "heading": "🔍実用化への課題", "instruction": "List scale-up, integration, reliability, and evidence gaps discussed by the authors."}
+  ]
+}

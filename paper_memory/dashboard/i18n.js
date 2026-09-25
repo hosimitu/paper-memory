@@ -435,9 +435,11 @@ window.i18n = {
                     currentLang = config.language;
                     applyTranslations();
                 }
+                return config;
             }
         } catch (e) {
             console.error('Failed to load config:', e);
         }
+        return {};
     }
 };

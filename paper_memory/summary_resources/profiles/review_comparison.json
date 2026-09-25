@@ -1,0 +1,15 @@
+{
+  "id": "review_comparison",
+  "label": "レビュー：技術・材料比較",
+  "kind": "review",
+  "classification": "A review whose main purpose is comparing multiple material families, separation technologies, or approaches using performance and design trade-offs.",
+  "hints": ["comparison", "membrane materials", "technology classes", "performance trade-offs", "comparative review"],
+  "instructions": "Compare approaches using equivalent metrics where possible. Never rank values measured under materially different conditions without flagging the mismatch. Separate review-level conclusions from individual reported results.",
+  "sections": [
+    {"key": "key_points", "heading": "🗾このレビューの要点", "instruction": "Give the main comparative conclusions in 3–6 points."},
+    {"key": "scope_purpose", "heading": "📝レビューの範囲と目的", "instruction": "State what approaches are compared and the review's comparison question."},
+    {"key": "technology_classes", "heading": "🧩技術・材料の分類", "instruction": "Group the technologies or materials and explain the distinguishing mechanisms."},
+    {"key": "comparison_summary", "heading": "📊性能と設計上のトレードオフ", "instruction": "Compare strengths, weaknesses, performance measures, and design trade-offs. Include units and test conditions for numbers; flag non-comparable data."},
+    {"key": "future_challenges", "heading": "🔍残る課題と研究方向", "instruction": "Summarize comparative gaps and future directions stated by the authors."}
+  ]
+}

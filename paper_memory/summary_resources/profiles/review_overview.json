@@ -1,0 +1,14 @@
+{
+  "id": "review_overview",
+  "label": "レビュー：分野俯瞰",
+  "kind": "review",
+  "classification": "A broad review or state-of-the-art survey that organizes a field, its technologies, and research directions without focusing on one narrow process or material class.",
+  "hints": ["state of the art", "recent advances", "comprehensive review", "broad overview"],
+  "instructions": "Synthesize the review across cited studies. Make clear which statements are the review authors' synthesis and avoid presenting one cited study as the consensus. Preserve units and conditions when reporting performance.",
+  "sections": [
+    {"key": "key_points", "heading": "🗾このレビューの要点", "instruction": "Give 3–6 concise points capturing the review's main synthesis and conclusions."},
+    {"key": "scope_purpose", "heading": "📝レビューの範囲と目的", "instruction": "State the question, technologies, applications, and literature scope covered. Do not infer an unstated search protocol."},
+    {"key": "topics", "heading": "📚主要なトピックと議論", "instruction": "Summarize the review's major topic groups and how they relate."},
+    {"key": "future_challenges", "heading": "🔍著者らが示す今後の展望や課題", "instruction": "List challenges and future directions explicitly discussed by the review authors."}
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "review_modeling",
+  "label": "レビュー：モデリング・シミュレーション",
+  "kind": "review",
+  "classification": "A review focused on mathematical models, membrane module or process simulation, model assumptions, numerical methods, validation, and uncertainty.",
+  "hints": ["modeling", "simulation", "CFD", "module model", "uncertainty quantification", "validation"],
+  "instructions": "Compare models by purpose, assumptions, dimensionality, computational cost, and validation evidence. Keep model predictions distinct from experimental measurements.",
+  "sections": [
+    {"key": "key_points", "heading": "🗾このレビューの要点", "instruction": "Summarize the main modeling conclusions and practical guidance."},
+    {"key": "model_families", "heading": "🧮モデルの種類と適用範囲", "instruction": "Classify model families, dimensions, numerical approaches, and the questions each can answer."},
+    {"key": "assumptions_effects", "heading": "⚖️仮定と非理想効果", "instruction": "Describe governing assumptions and nonideal phenomena included or omitted."},
+    {"key": "validation_uncertainty", "heading": "✅検証と不確実性", "instruction": "Summarize validation data, error measures, uncertainty treatment, and limitations."},
+    {"key": "model_selection", "heading": "🧭モデル選択の指針", "instruction": "State how model fidelity should be chosen for the intended design question."},
+    {"key": "future_challenges", "heading": "🔍今後の課題", "instruction": "List author-stated needs in data, model integration, validation, and computation."}
+  ]
+}
